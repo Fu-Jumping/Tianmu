@@ -5,6 +5,7 @@ import com.tianmu.agent.tool.*;
 import com.tianmu.agent.video.*;
 import org.springframework.stereotype.Component;
 import java.util.Map;
+import java.util.Locale;
 
 @Component
 public final class AnalyzeVideoContentTool implements AgentTool {
@@ -23,6 +24,14 @@ public final class AnalyzeVideoContentTool implements AgentTool {
         var facts=context.videoQuery(control -> video.analyze(id,start,end,focus,context.scope(),control));
         Evidence evidence=context.registerVideoEvidence(facts);
         Map<String,Object> content=json.convertValue(facts,new com.fasterxml.jackson.core.type.TypeReference<Map<String,Object>>(){});
-        return new ToolResult(name(),Map.of("analysis",content,"evidence_id",evidence.id(),"question",focus,"limitations","Generic sampled-frame facts are reused across questions. Answer the question using these facts; do not infer unseen details. Use a narrower playback interval only when needed. Playback time is distinct from creation time."),evidence.id());
+        var playback=Map.of("start",playbackTime(facts.startMs()),"end",playbackTime(facts.endMs()));
+        return new ToolResult(name(),Map.of("analysis",content,"playback_range",playback,"evidence_id",evidence.id(),"question",focus,"limitations","Generic sampled-frame facts are reused across questions. Answer the question using these facts; do not infer unseen details. Playback time is distinct from creation time. If stating the analyzed range, copy playback_range exactly; do not convert millisecond values yourself. Sample timestamps are not exact event times."),evidence.id());
+    }
+    static String playbackTime(long milliseconds) {
+        if(milliseconds<0)throw new IllegalArgumentException("Invalid playback time");
+        long seconds=milliseconds/1000, hours=seconds/3600, minutes=seconds/60%60, remaining=seconds%60;
+        String time=hours>0?String.format(Locale.ROOT,"%d:%02d:%02d",hours,minutes,remaining)
+                :String.format(Locale.ROOT,"%02d:%02d",minutes,remaining);
+        return milliseconds%1000==0?time:time+String.format(Locale.ROOT,".%03d",milliseconds%1000);
     }
 }
