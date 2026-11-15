@@ -40,12 +40,18 @@ public final class HttpContentProcessingAuthority implements ContentProcessingAu
         post("/check",Map.of("grant",grant,"checkpoint",checkpoint.name()),Void.class,control);
     }
     public VideoContent.Media media(ContentWork.Grant grant,long startMs,long endMs,CallControl control) {
+        return readMedia(grant,startMs,endMs,false,control);
+    }
+    @Override public VideoContent.Media audio(ContentWork.Grant grant,long startMs,long endMs,CallControl control) {
+        return readMedia(grant,startMs,endMs,true,control);
+    }
+    private VideoContent.Media readMedia(ContentWork.Grant grant,long startMs,long endMs,boolean audioOnly,CallControl control) {
         if(startMs<0 || endMs<=startMs || endMs-startMs>120000)throw new IllegalArgumentException("Invalid media range");
-        var result=post("/media",Map.of("grant",grant,"startMs",startMs,"endMs",endMs),VideoContent.Media.class,control);
+        var result=post("/media",Map.of("grant",grant,"startMs",startMs,"endMs",endMs,"audioOnly",audioOnly),VideoContent.Media.class,control);
         if(result==null || result.source()==null || result.source().videoId()!=grant.asset().videoId()
                 || !grant.asset().sourceVersion().equals(result.source().sourceVersion())
                 || result.startMs()!=startMs || result.endMs()!=endMs || result.source().durationMs()<endMs
-                || result.audioBase64()==null || result.frames()==null || result.frames().size()>12)
+                || result.audioBase64()==null || result.frames()==null || result.frames().size()>12 || audioOnly && !result.frames().isEmpty())
             throw new AgentException("INVALID_EVIDENCE","Invalid platform media response");
         return result;
     }

@@ -26,4 +26,11 @@ class ContentProcessingConfigurationTest {
         context().withPropertyValues("agent.bridge.enabled=true","agent.content-processing.enabled=true","agent.content-processing.token-file="+token)
                 .run(c->assertThat(c).hasFailed());
     }
+    @Test void readAuthorityCanStayEnabledWhileContentProductionIsDisabled(){
+        context().withUserConfiguration(ContentReadingConfiguration.class,ContentReadBridgeController.class)
+                .withBean(BusinessAuthentication.class,()->mock(BusinessAuthentication.class))
+                .withPropertyValues("agent.bridge.enabled=true","agent.content-processing.enabled=false","agent.content-reading.enabled=true")
+                .run(c->{assertThat(c).hasNotFailed();assertThat(c).hasSingleBean(BusinessContentIdentityReader.class);
+                    assertThat(c).hasSingleBean(ContentReadBridgeController.class);assertThat(c).doesNotHaveBean(BusinessContentAuthority.class);});
+    }
 }

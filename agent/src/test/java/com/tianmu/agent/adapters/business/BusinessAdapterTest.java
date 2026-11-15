@@ -43,6 +43,8 @@ class BusinessAdapterTest {
                 JsonNode body=mapper.readTree(exchange.getRequestBody()); Set<Long> result=new HashSet<>();
                 for(var id:body.path("videoIds")) if(allowed.contains(id.longValue())) result.add(id.longValue());
                 value=Map.of("videoIds",authorizationOverride == null ? result : authorizationOverride);
+            } else if(path.endsWith("content-identity")) {
+                status=metricStatus;value=Map.of("asset",Map.of("tenantId","tianmu","videoId","1001","sourceVersion","v1","authorizationDomain","public","revocationEpoch",1),"durationMs",31000);
             } else if(path.endsWith("comments-analysis")) {
                 status = metricStatus; value = commentPayload;
             } else if(path.endsWith("danmaku-analysis")) {
@@ -75,6 +77,15 @@ class BusinessAdapterTest {
         adapter=new RemoteBusinessAdapter(new BusinessProperties(URI.create("http://127.0.0.1:"+server.getAddress().getPort()),5000),mapper,provider);
     }
     @AfterEach void stop(){server.stop(0);}
+    @Test void contentReadIdentityUsesViewerCredentialsAndPropagatesRevocationOrVersionConflict(){
+        var scope=adapter.forCreate("viewer-read-token","",null,new com.tianmu.agent.core.RequestContext("1001"),null);
+        var control=new CallControl(Instant.now().plusSeconds(5),new CancellationToken());
+        assertEquals("v1",adapter.current(1001,scope,control).asset().sourceVersion());
+        assertTrue(headers.stream().allMatch("Bearer viewer-read-token"::equals));
+        assertTrue(paths.stream().noneMatch(p->p.contains("content-processing")));
+        metricStatus=409;assertEquals("VIDEO_VERSION_CHANGED",assertThrows(AgentException.class,()->adapter.current(1001,scope,control)).code());
+        metricStatus=403;assertEquals("FORBIDDEN",assertThrows(AgentException.class,()->adapter.current(1001,scope,control)).code());
+    }
     @Test void uniqueOwnedTitleIsAuthorizedBeforeFreezingAndHistoricalReadRechecksOwnership(){
         var current=adapter.forCreate("token","分析我上周那个小鸭视频的评论",null,null,null);
         assertEquals(Set.of(1001L),current.videoIds());assertTrue(paths.contains("/internal/agent/my-videos"));

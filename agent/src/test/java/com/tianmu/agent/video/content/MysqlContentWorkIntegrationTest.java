@@ -185,7 +185,7 @@ class MysqlContentWorkIntegrationTest {
     }
     private ContentProcessingMediaPort media() {
         return (grant,from,to,control)->new VideoContent.Media(
-                new VideoContent.Source(asset.videoId(),asset.sourceVersion(),60000),from,to,List.of(),"AQID");
+                new VideoContent.Source(asset.videoId(),asset.sourceVersion(),60000),from,to,List.of(),Base64.getEncoder().encodeToString(TestWave.pcm(to-from)));
     }
     private ContentTranscriptionWorker worker(ContentWorkService service,ContentProcessingMediaPort media,TranscriptionPort asr,ContentTranscriptStore results) {
         return new ContentTranscriptionWorker(store,service,media,asr,results,"transcriber","asr-v1",Duration.ofSeconds(30),Duration.ofSeconds(5));
@@ -262,5 +262,99 @@ class MysqlContentWorkIntegrationTest {
         }
         assertTrue(dispatchChecks.get()>=5);assertEquals(1,store.get(job.id()).attempts());
         assertEquals(1,store.get(job.id()).fence());
+    }
+    private Job publish(String segment,long from,long to,List<TimedTranscript.Segment> segments)throws Exception {
+        var unit=new Unit(asset,Stage.TRANSCRIBE,segment,"asr-v1",from,to);
+        Job job=store.enqueue(unit,grant(),Instant.now().plusSeconds(300),3);
+        Lease lease=store.claim("publisher",Duration.ofSeconds(30),Stage.TRANSCRIBE,"asr-v1").orElseThrow();
+        assertEquals(job.id(),lease.jobId());
+        String text=segments.stream().map(TimedTranscript.Segment::text).collect(java.util.stream.Collectors.joining());
+        var transcript=new TimedTranscript(from,to,text,segments.isEmpty()?TimedTranscript.State.NO_TRANSCRIPT:TimedTranscript.State.AVAILABLE,
+                TimedTranscript.Precision.SEGMENT,segments);
+        var files=new FileContentTranscriptStore(directory,new ObjectMapper());
+        Receipt receipt=files.save(store.requireLease(lease),lease,transcript);assertTrue(store.complete(lease,receipt));return store.get(job.id());
+    }
+    private com.tianmu.agent.core.AgentTypes.AccessScope viewer(){return new com.tianmu.agent.core.AgentTypes.AccessScope("site","reader",Set.of(),"read-auth",Set.of(asset.videoId()));}
+    private TranscriptQueryProperties readPolicy(int candidates,int concurrency){return new TranscriptQueryProperties("asr-v1",directory.toString(),60000,candidates,12,8000,4194304,concurrency,15);}
+    private TranscriptRetrievalService reader()throws Exception {
+        return new TranscriptRetrievalService(store,new FileContentTranscriptStore(directory,new ObjectMapper()),
+                (id,v,c)->new ContentReadAuthority.Identity(asset,60000),readPolicy(128,4));
+    }
+    private TranscriptRetrievalService.Request current(long anchor){return new TranscriptRetrievalService.Request(asset.sourceVersion(),TranscriptRetrievalService.Mode.CURRENT,anchor,null,null,"");}
+    @Test void queryReturnsOnlyPublishedVerifiedTextAndCitationCanBeRevalidated()throws Exception {
+        publish("read",0,30000,List.of(new TimedTranscript.Segment(0,10000,"每个输入只有一个输出"),new TimedTranscript.Segment(10000,30000,"不同输入可以对应同一个输出")));
+        var reader=reader();var bundle=reader.query(asset.videoId(),viewer(),current(30000),control());
+        assertEquals(TranscriptRetrievalService.Status.READY,bundle.status());assertEquals(2,bundle.excerpts().size());assertTrue(bundle.missingRanges().isEmpty());
+        var excerpt=bundle.excerpts().get(1);
+        assertEquals(excerpt,reader.citation(asset.videoId(),viewer(),current(30000),excerpt.citationId(),control()));
+        assertFalse(new ObjectMapper().findAndRegisterModules().writeValueAsString(bundle).contains("grant"));
+    }
+    @Test void sentenceTimestampCannotHideFutureAudioDependency()throws Exception {
+        publish("previous",0,30000,List.of(new TimedTranscript.Segment(0,30000,"已讲的定义")));
+        publish("future-clip",30000,60000,List.of(new TimedTranscript.Segment(30000,35000,"后文答案影响的转写")));
+        var reader=reader();var bounded=reader.query(asset.videoId(),viewer(),current(35000),control());
+        assertEquals(TranscriptRetrievalService.Status.PARTIAL,bounded.status());assertEquals(1,bounded.excerpts().size());
+        assertTrue(bounded.limitations().contains("DEPENDENCY_OUTSIDE_WINDOW"));assertEquals("已讲的定义",bounded.excerpts().get(0).text());
+        assertEquals(List.of(new TranscriptRetrievalService.Range(30000,35000)),bounded.missingRanges());
+        var explicit=new TranscriptRetrievalService.Request(asset.sourceVersion(),TranscriptRetrievalService.Mode.INTERVAL,null,30000L,60000L,"");
+        assertEquals("后文答案影响的转写",reader.query(asset.videoId(),viewer(),explicit,control()).excerpts().get(0).text());
+    }
+    @Test void completedAudioWithNoTextIsNotClaimedAsSilenceOrReady()throws Exception {
+        publish("empty",0,30000,List.of());var bundle=reader().query(asset.videoId(),viewer(),current(30000),control());
+        assertEquals(TranscriptRetrievalService.Status.NO_TEXT,bundle.status());assertTrue(bundle.limitations().contains("NO_TRANSCRIPT"));
+        assertTrue(bundle.excerpts().isEmpty());
+    }
+    @Test void corruptedResultCannotProduceExcerptOrCitation()throws Exception {
+        var job=publish("corrupt",0,30000,List.of(new TimedTranscript.Segment(0,30000,"原文")));
+        var reader=reader();String id=reader.query(asset.videoId(),viewer(),current(30000),control()).excerpts().get(0).citationId();
+        Files.writeString(directory.resolve(job.id()+"-1.json"),"tampered");
+        var result=reader.query(asset.videoId(),viewer(),current(30000),control());
+        assertTrue(result.excerpts().isEmpty());assertTrue(result.limitations().contains("RESULT_UNAVAILABLE"));
+        assertEquals("CONTENT_RESULT_UNAVAILABLE",assertThrows(AgentException.class,()->reader.citation(asset.videoId(),viewer(),current(30000),id,control())).code());
+    }
+    @Test void revocationDuringFileReadRejectsTheEntireResponse()throws Exception {
+        publish("read-revoke",0,30000,List.of(new TimedTranscript.Segment(0,30000,"私有结果")));
+        var files=new FileContentTranscriptStore(directory,new ObjectMapper());AtomicBoolean allowed=new AtomicBoolean(true);
+        ContentTranscriptStore wrapped=new ContentTranscriptStore(){
+            public Receipt save(Job j,Lease l,TimedTranscript t){return files.save(j,l,t);}
+            public void verify(Job j,Receipt r){files.verify(j,r);}
+            public Loaded read(Job j,Receipt r,int limit){var value=files.read(j,r,limit);allowed.set(false);return value;}
+        };
+        var reader=new TranscriptRetrievalService(store,wrapped,(id,v,c)->{if(!allowed.get())throw new AgentException("FORBIDDEN","revoked");return new ContentReadAuthority.Identity(asset,60000);},readPolicy(128,4));
+        assertEquals("FORBIDDEN",assertThrows(AgentException.class,()->reader.query(asset.videoId(),viewer(),current(30000),control())).code());
+    }
+    @Test void republishedVideoDoesNotReviveOldCitationsAndStaleVersionIsRejected()throws Exception {
+        publish("epoch",0,30000,List.of(new TimedTranscript.Segment(0,30000,"旧代次")));
+        var live=new java.util.concurrent.atomic.AtomicReference<>(new ContentReadAuthority.Identity(asset,60000));
+        var reader=new TranscriptRetrievalService(store,new FileContentTranscriptStore(directory,new ObjectMapper()),(id,v,c)->live.get(),readPolicy(128,4));
+        String id=reader.query(asset.videoId(),viewer(),current(30000),control()).excerpts().get(0).citationId();
+        live.set(new ContentReadAuthority.Identity(new ContentAssetKey("site",asset.videoId(),asset.sourceVersion(),"public",2),60000));
+        assertTrue(reader.query(asset.videoId(),viewer(),current(30000),control()).excerpts().isEmpty());
+        assertEquals("CONTENT_CITATION_NOT_FOUND",assertThrows(AgentException.class,()->reader.citation(asset.videoId(),viewer(),current(30000),id,control())).code());
+        live.set(new ContentReadAuthority.Identity(new ContentAssetKey("site",asset.videoId(),"new-version","public",2),60000));
+        assertEquals("VIDEO_VERSION_CHANGED",assertThrows(AgentException.class,()->reader.query(asset.videoId(),viewer(),current(30000),control())).code());
+    }
+    @Test void candidateCapReportsMissingCoverageInsteadOfClaimingComplete()throws Exception {
+        publish("first",0,15000,List.of(new TimedTranscript.Segment(0,15000,"第一段")));
+        publish("second",15000,30000,List.of(new TimedTranscript.Segment(15000,30000,"第二段")));
+        var reader=new TranscriptRetrievalService(store,new FileContentTranscriptStore(directory,new ObjectMapper()),(id,v,c)->new ContentReadAuthority.Identity(asset,60000),readPolicy(1,4));
+        var result=reader.query(asset.videoId(),viewer(),current(30000),control());
+        assertEquals(TranscriptRetrievalService.Status.PARTIAL,result.status());assertTrue(result.limitations().contains("CANDIDATE_LIMIT"));
+        assertFalse(result.missingRanges().isEmpty());
+    }
+    @Test void readerQuotaIsHeldUntilActualReadAndAuthorityChecksFinish()throws Exception {
+        publish("quota",0,30000,List.of(new TimedTranscript.Segment(0,30000,"内容")));
+        CountDownLatch entered=new CountDownLatch(1),release=new CountDownLatch(1);AtomicInteger checks=new AtomicInteger();
+        var reader=new TranscriptRetrievalService(store,new FileContentTranscriptStore(directory,new ObjectMapper()),(id,v,c)->{
+            if(checks.getAndIncrement()==0){entered.countDown();try{release.await();}catch(InterruptedException e){throw new IllegalStateException(e);}}
+            return new ContentReadAuthority.Identity(asset,60000);
+        },readPolicy(128,1));
+        var pool=Executors.newSingleThreadExecutor();
+        try {
+            var first=pool.submit(()->reader.query(asset.videoId(),viewer(),current(30000),control()));assertTrue(entered.await(5,TimeUnit.SECONDS));
+            assertEquals("CONTENT_QUERY_BUSY",assertThrows(AgentException.class,()->reader.query(asset.videoId(),viewer(),current(30000),control())).code());
+            release.countDown();assertEquals(TranscriptRetrievalService.Status.READY,first.get(10,TimeUnit.SECONDS).status());
+            assertNotNull(reader.identity(asset.videoId(),viewer(),control()));
+        }finally{release.countDown();pool.shutdownNow();assertTrue(pool.awaitTermination(10,TimeUnit.SECONDS));}
     }
 }

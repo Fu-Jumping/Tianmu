@@ -50,17 +50,20 @@ public final class BusinessVideoContent {
         catch (Exception e) { throw new BridgeException("VIDEO_SOURCE_UNAVAILABLE", 503); }
     }
     public Media sample(BusinessAuthentication.Principal principal, long videoId, String version, long start, long end) {
-        return sample(() -> resolve(principal, videoId), videoId, version, start, end);
+        return sample(() -> resolve(principal, videoId), videoId, version, start, end, false);
     }
     public Media publicSample(long videoId, String version, long start, long end) {
-        return sample(() -> resolvePublic(videoId), videoId, version, start, end);
+        return sample(() -> resolvePublic(videoId), videoId, version, start, end, false);
     }
-    private Media sample(java.util.function.Supplier<Resolved> resolver, long videoId, String version, long start, long end) {
+    public Media publicAudioSample(long videoId, String version, long start, long end) {
+        return sample(() -> resolvePublic(videoId), videoId, version, start, end, true);
+    }
+    private Media sample(java.util.function.Supplier<Resolved> resolver, long videoId, String version, long start, long end, boolean audioOnly) {
         Resolved resolved = resolver.get();
         Source source = resolved.source();
         if (!source.sourceVersion().equals(version)) throw new BridgeException("VIDEO_VERSION_CHANGED", 409);
         if (start < 0 || end <= start || end > source.durationMs()
-                || (end - start > 120_000 && (start != 0 || end != source.durationMs()))) throw new BridgeException("INVALID_PLAYBACK_RANGE", 400);
+                || (end - start > 120_000 && (audioOnly || start != 0 || end != source.durationMs()))) throw new BridgeException("INVALID_PLAYBACK_RANGE", 400);
         if (!slots.tryAcquire()) throw new BridgeException("VIDEO_PROCESSOR_BUSY", 503);
         Path temp = null;
         Instant deadline = Instant.now().plusSeconds(50);
@@ -79,7 +82,7 @@ public final class BusinessVideoContent {
             }
             if (!resolver.get().source().sourceVersion().equals(version)) throw new BridgeException("VIDEO_VERSION_CHANGED", 409);
             List<Frame> frames = new ArrayList<>();
-            int count = (int)Math.min(12, Math.max(1, (end - start + 999) / 1000));
+            int count = audioOnly ? 0 : (int)Math.min(12, Math.max(1, (end - start + 999) / 1000));
             for (int i = 0; i < count; i++) {
                 long at = start + (end - start) * (2L * i + 1) / (2L * count);
                 Path frame = temp.resolve("frame-" + i + ".jpg");
@@ -93,10 +96,11 @@ public final class BusinessVideoContent {
                 Path wav = temp.resolve("audio.wav");
                 // Optional audio stream: silent clips are valid visual inputs.
                 process(List.of("ffmpeg", "-nostdin", "-v", "error", "-protocol_whitelist", "file,pipe", "-format_whitelist", "mov,matroska,webm,avi", "-threads", "1", "-ss", seconds(start),
-                        "-i", input.toString(), "-t", seconds(end - start), "-map", "0:a:0?", "-vn", "-ac", "1", "-ar", "16000", "-threads", "1", wav.toString()), deadline, true);
+                        "-i", input.toString(), "-t", seconds(end - start), "-map", "0:a:0?", "-vn", "-ac", "1", "-ar", "16000", "-c:a", "pcm_s16le", "-threads", "1", wav.toString()), deadline, true);
                 if (Files.exists(wav) && Files.size(wav) > 44 && Files.size(wav) < 4_000_000)
                     audio = Base64.getEncoder().encodeToString(Files.readAllBytes(wav));
             }
+            if (audioOnly && audio.isBlank()) throw new BridgeException("VIDEO_AUDIO_UNAVAILABLE", 422);
             return new Media(source, start, end, List.copyOf(frames), audio);
         } catch (BridgeException e) { throw e; }
         catch (Exception e) { throw new BridgeException("VIDEO_EXTRACTION_UNAVAILABLE", 503); }

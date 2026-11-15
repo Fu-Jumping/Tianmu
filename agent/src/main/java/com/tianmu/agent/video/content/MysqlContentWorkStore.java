@@ -49,12 +49,22 @@ public final class MysqlContentWorkStore {
         var rows = db.queryForList("SELECT * FROM agent_content_work WHERE job_id=?", id.toString());
         if (rows.size() != 1) throw error("CONTENT_WORK_NOT_FOUND");
         var r = rows.get(0);
+        return row(id,r);
+    }
+    private Job row(UUID id,Map<String,Object> r) {
         return new Job(id, decode(r.get("document"), Unit.class), decode(r.get("grant_json"), Grant.class),
                 Status.valueOf(r.get("status").toString()), ((Number)r.get("attempts")).intValue(),
                 ((Number)r.get("max_attempts")).intValue(), ((Number)r.get("fence")).longValue(),
                 (String)r.get("lease_owner"), instant(r.get("lease_until")), instant(r.get("deadline_at")),
                 r.get("result_ref") == null ? null : new Receipt(r.get("result_ref").toString(), r.get("result_digest").toString()),
                 (String)r.get("error_code"));
+    }
+    public List<Job> published(ContentAssetKey asset,String stageVersion,long startMs,long endMs,int limit) {
+        identifier(stageVersion);
+        if(startMs<0 || endMs<startMs || limit<1 || limit>257)throw new IllegalArgumentException("Invalid content lookup");
+        return db.queryForList("SELECT * FROM agent_content_work WHERE tenant_key=? AND video_key=? AND source_key=? AND domain_key=? AND epoch_key=? AND stage_key='TRANSCRIBE' AND version_key=? AND status='SUCCEEDED' AND start_key<? AND end_key>? ORDER BY start_key,job_id LIMIT ?",
+                asset.tenantId(),asset.videoId(),asset.sourceVersion(),asset.authorizationDomain(),asset.revocationEpoch(),stageVersion,endMs,startMs,limit)
+                .stream().map(r->row(UUID.fromString(r.get("job_id").toString()),r)).toList();
     }
     public Optional<Lease> claim(String worker, Duration leaseDuration) {
         return claim(worker, leaseDuration, null, null);

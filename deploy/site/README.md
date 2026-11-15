@@ -162,3 +162,11 @@ Loop 默认 `HARNESS_MODEL=deepseek-flash`（官方当前对应 V4.1 Flash）；
 接口仅用于受保护的内部服务网络，不加入公网代理。grant默认900秒、范围30至3600秒；权威查询默认5秒、范围1至10秒；均启动读取。轮换密钥时先暂停并排空worker，再协调两端重启，避免无效请求消耗任务重试预算。生产worker、模型质量门槛和媒体读取仍需独立验收，不能仅打开业务开关即宣布上线。
 
 详见`agent/docs/视频个人助理生产化技术设计.md`第十七节。当前没有为平台worker提供自动启用配置。
+
+### 转写读取（默认关闭，尚未部署）
+
+业务读取开关为`agent.content-reading.enabled=true`，同时需要`agent.bridge.enabled=true`与上述权威迁移安装完成。`agent.content-reading.query-seconds`默认5秒，范围1至10秒。观众使用现有登录身份，读取不签发生产grant，因此可独立暂停`agent.content-processing.enabled`而保留合法结果读取。内部`content-identity`接口不加入公网代理。
+
+Agent需完成V30迁移，再显式启用`agent.video.transcript-query.enabled`并指定`agent.video.transcript-query.stage-version`及`agent.video.transcript-query.result-directory`。目录必须与worker结果目录共享同一个受控持久卷，不能发布为静态下载目录；当前不是对象存储多节点方案。固定stageVersion须对应已通过验收的生产器，不自动选择或启用ASR。读取配置均启动生效，完整范围见技术设计第十八节和Agent配置目录。
+
+新增接口只提供受控转写查询与引用复核，尚未接入现有聊天工具、完成策略、前台引用按钮或自动补产。不要仅打开这些开关就宣布视频个人助理上线；真实模型质量、任务调度、预算及Trace关联仍需后续验收。

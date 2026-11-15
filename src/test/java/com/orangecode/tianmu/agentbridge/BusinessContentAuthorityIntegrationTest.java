@@ -111,4 +111,26 @@ class BusinessContentAuthorityIntegrationTest {
             assertEquals("CONTENT_AUTHORITY_NOT_READY",assertThrows(BridgeException.class,()->authority.issue(UUID.randomUUID(),7)).code());
         }finally{db.update("UPDATE agent_media_authority_schema SET ready=TRUE");}
     }
+    @Test void viewerReadIdentityUsesLiveEpochAndNeverIssuesAProcessingGrant(){
+        var viewer=new BusinessAuthentication.Principal("site","reader");
+        var reader=new BusinessContentIdentityReader(source,media,"site",5);
+        var identity=new BusinessContentIdentityReader(source,media,"site",5).readableIdentity(viewer,7);assertEquals(VERSION,identity.asset().sourceVersion());
+        assertEquals(0,db.queryForObject("SELECT COUNT(*) FROM agent_media_processing_grant",Integer.class));
+        db.update("UPDATE video SET status=0 WHERE video_id=7");
+        assertThrows(BridgeException.class,()->new BusinessContentIdentityReader(source,media,"site",5).readableIdentity(viewer,7));
+        db.update("UPDATE video SET status=2 WHERE video_id=7");
+        assertTrue(new BusinessContentIdentityReader(source,media,"site",5).readableIdentity(viewer,7).asset().revocationEpoch()>identity.asset().revocationEpoch());
+        assertThrows(BridgeException.class,()->new BusinessContentIdentityReader(source,media,"site",5).readableIdentity(new BusinessAuthentication.Principal("other","reader"),7));
+    }
+    @Test void epochChangeDuringReadMetadataDoesNotCreateAMixedIdentity(){
+        when(media.publicSource(7)).thenAnswer(call->{db.update("UPDATE video SET status=0 WHERE video_id=7");db.update("UPDATE video SET status=2 WHERE video_id=7");return new BusinessVideoContent.Source(7,VERSION,60000);});
+        assertEquals("VIDEO_VERSION_CHANGED",assertThrows(BridgeException.class,()->new BusinessContentIdentityReader(source,media,"site",5).readableIdentity(new BusinessAuthentication.Principal("site","reader"),7)).code());
+    }
+    @Test void audioOnlyPlatformReadDoesNotInvokeFrameExtraction(){
+        var grant=authority.issue(UUID.randomUUID(),7);
+        var audio=new BusinessVideoContent.Media(new BusinessVideoContent.Source(7,VERSION,60000),0,1000,List.of(),"AQID");
+        when(media.publicAudioSample(7,VERSION,0,1000)).thenReturn(audio);
+        assertEquals(audio,authority.readAudio(grant,0,1000));
+        verify(media,never()).publicSample(anyLong(),anyString(),anyLong(),anyLong());
+    }
 }

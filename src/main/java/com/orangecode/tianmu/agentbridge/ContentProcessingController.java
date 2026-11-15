@@ -24,7 +24,9 @@ public final class ContentProcessingController {
     public record Issue(UUID requestId,String videoId) {}
     public enum Checkpoint { ADMISSION,CLAIM,DISPATCH,COMMIT }
     public record Check(BusinessContentAuthority.Grant grant,Checkpoint checkpoint) {}
-    public record Read(BusinessContentAuthority.Grant grant,long startMs,long endMs) {}
+    public record Read(BusinessContentAuthority.Grant grant,long startMs,long endMs,boolean audioOnly) {
+        public Read(BusinessContentAuthority.Grant grant,long startMs,long endMs){this(grant,startMs,endMs,false);}
+    }
     private void auth(String supplied) {
         if(supplied==null || supplied.length()>256 || !MessageDigest.isEqual(token,supplied.getBytes(StandardCharsets.UTF_8)))
             throw new BridgeException("UNAUTHORIZED",401);
@@ -46,7 +48,9 @@ public final class ContentProcessingController {
         auth(token);
         if(request==null || request.startMs()<0 || request.endMs()<=request.startMs()
                 || request.endMs()-request.startMs()>120000)throw new BridgeException("INVALID_PLAYBACK_RANGE",400);
-        return ResponseEntity.ok().cacheControl(CacheControl.noStore()).body(authority.read(request.grant(),request.startMs(),request.endMs()));
+        return ResponseEntity.ok().cacheControl(CacheControl.noStore()).body(request.audioOnly()
+                ?authority.readAudio(request.grant(),request.startMs(),request.endMs())
+                :authority.read(request.grant(),request.startMs(),request.endMs()));
     }
     @PostMapping("/grants/{id}/revoke") public void revoke(@RequestHeader(value="X-Content-Processing-Token",required=false)String token,@PathVariable UUID id) {
         auth(token);authority.revoke(id);

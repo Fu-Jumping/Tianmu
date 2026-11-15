@@ -46,7 +46,10 @@ public final class FileContentTranscriptStore implements ContentTranscriptStore 
                 || !Arrays.equals(Files.readAllBytes(file),expected))
             throw new AgentException("CONTENT_RESULT_CONFLICT","Stored content result differs");
     }
-    public void verify(ContentWork.Job job,ContentWork.Receipt receipt) {
+    public void verify(ContentWork.Job job,ContentWork.Receipt receipt) { read(job,receipt,2_000_000); }
+    public ContentTranscriptStore.Loaded read(ContentWork.Job job,ContentWork.Receipt receipt,int maxBytes) {
+        if(maxBytes<1)throw new AgentException("CONTENT_READ_LIMIT","Content read budget exhausted");
+        int limit=Math.min(2_000_000,maxBytes);
         try {
             String prefix="content:"+job.id()+":";
             if(!receipt.reference().startsWith(prefix))throw new IllegalArgumentException();
@@ -54,7 +57,9 @@ public final class FileContentTranscriptStore implements ContentTranscriptStore 
             if(!fence.matches("[1-9][0-9]{0,17}") || Long.parseLong(fence)>job.fence())throw new IllegalArgumentException();
             Path file=root.resolve(job.id()+"-"+fence+".json");
             if(!Files.isRegularFile(file,LinkOption.NOFOLLOW_LINKS) || Files.size(file)>2_000_000)throw new IllegalArgumentException();
-            byte[] bytes=Files.readAllBytes(file);
+            byte[] bytes;
+            try(var stream=Files.newInputStream(file,StandardOpenOption.READ,LinkOption.NOFOLLOW_LINKS)){bytes=stream.readNBytes(limit+1);}
+            if(bytes.length>limit)throw new AgentException("CONTENT_READ_LIMIT","Content read budget exhausted");
             String digest=HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256").digest(bytes));
             if(!receipt.digest().equals(digest))throw new IllegalArgumentException();
             var value=json.readTree(bytes);
@@ -62,6 +67,8 @@ public final class FileContentTranscriptStore implements ContentTranscriptStore 
                     || !job.unit().equals(json.treeToValue(value.path("unit"),ContentWork.Unit.class)))throw new IllegalArgumentException();
             TimedTranscript transcript=json.treeToValue(value.path("transcript"),TimedTranscript.class);
             if(transcript.clipStartMs()!=job.unit().startMs() || transcript.clipEndMs()!=job.unit().endMs())throw new IllegalArgumentException();
-        }catch(Exception invalid){throw new AgentException("CONTENT_RESULT_UNAVAILABLE","Stored transcript cannot be verified");}
+            return new ContentTranscriptStore.Loaded(transcript,bytes.length);
+        }catch(AgentException limitReached){throw limitReached;}
+        catch(Exception invalid){throw new AgentException("CONTENT_RESULT_UNAVAILABLE","Stored transcript cannot be verified");}
     }
 }

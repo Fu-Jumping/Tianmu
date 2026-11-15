@@ -59,7 +59,7 @@ public final class ContentTranscriptionWorker implements AutoCloseable {
                 results.verify(job,job.result());
                 return service.complete(lease,job.result(),base)?Outcome.SUCCEEDED:Outcome.FAILED;
             }
-            var clip=media.media(job.grant(),job.unit().startMs(),job.unit().endMs(),base);
+            var clip=media.audio(job.grant(),job.unit().startMs(),job.unit().endMs(),base);
             checkDeadline(base);
             if(clip==null || clip.source()==null || clip.source().videoId()!=job.unit().asset().videoId() || !job.unit().asset().sourceVersion().equals(clip.source().sourceVersion())
                     || clip.source().durationMs()<job.unit().endMs()
@@ -67,6 +67,7 @@ public final class ContentTranscriptionWorker implements AutoCloseable {
                 throw new AgentException("CONTENT_AUDIO_UNAVAILABLE","No usable audio for this media range");
             byte[] audio=Base64.getDecoder().decode(clip.audioBase64());
             if(audio.length==0 || audio.length>4_000_000)throw new AgentException("CONTENT_AUDIO_UNAVAILABLE","Audio size is invalid");
+            WaveClip.requireNormalized(audio,clip.endMs()-clip.startMs());
             service.requireDispatch(lease,base);
             CallControl modelControl=base.withDispatchBarrier(()->{parent.beforeDispatch();service.requireDispatch(owned,base);});
             modelControl.beforeDispatch();

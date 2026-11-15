@@ -63,4 +63,15 @@ class HttpContentProcessingAuthorityTest {
         assertEquals(expected,writer.readTree(writer.writeValueAsBytes(grant)));
         assertEquals(800000026087195706L,grant.asset().videoId());
     }
+    @Test void transcriptionRequestsExplicitAudioOnlyExtraction()throws Exception {
+        var server=HttpServer.create(new InetSocketAddress("127.0.0.1",0),0);AtomicBoolean audioOnly=new AtomicBoolean();
+        server.createContext("/internal/agent/content-processing/media",exchange->{try(exchange){
+            audioOnly.set(json.readTree(exchange.getRequestBody()).path("audioOnly").asBoolean());
+            byte[] bytes=json.writeValueAsBytes(new VideoContent.Media(new VideoContent.Source(7,"v1",60000),0,1000,List.of(),"AQID"));
+            exchange.sendResponseHeaders(200,bytes.length);exchange.getResponseBody().write(bytes);
+        }});server.start();
+        var grant=new ContentWork.Grant(UUID.randomUUID(),new ContentAssetKey("site",7,"v1","public",1),Instant.now().plusSeconds(60));
+        try{assertTrue(client(server).audio(grant,0,1000,control()).frames().isEmpty());assertTrue(audioOnly.get());}
+        finally{server.stop(0);}
+    }
 }

@@ -34,7 +34,7 @@ public class BusinessAdapters {
     }
 }
 
-final class RemoteBusinessAdapter implements IdentityPort, BusinessQueryPort, com.tianmu.agent.query.DanmakuQueryPort, com.tianmu.agent.video.VideoContentPort, com.tianmu.agent.interaction.CreatorPublicationPort, com.tianmu.agent.query.VideoPagePort, com.tianmu.agent.feedback.FeedbackSnapshotPort,com.tianmu.agent.query.VideoSearchPort {
+final class RemoteBusinessAdapter implements com.tianmu.agent.video.content.ContentReadAuthority, IdentityPort, BusinessQueryPort, com.tianmu.agent.query.DanmakuQueryPort, com.tianmu.agent.video.VideoContentPort, com.tianmu.agent.interaction.CreatorPublicationPort, com.tianmu.agent.query.VideoPagePort, com.tianmu.agent.feedback.FeedbackSnapshotPort,com.tianmu.agent.query.VideoSearchPort {
     private record RawSample(String id, int bucket, String text, boolean truncated, Long playbackMs) {}
     private record AnalysisResponse(DanmakuTypes.Query query, long totalMessages, long uniqueSenders,
             List<DanmakuTypes.Bucket> buckets, List<RawSample> samples, Instant dataAsOf, String source, boolean demo, com.tianmu.agent.core.AudienceData.Overview audience,com.tianmu.agent.core.AudienceReportData.Sources sources) {}
@@ -131,6 +131,8 @@ final class RemoteBusinessAdapter implements IdentityPort, BusinessQueryPort, co
                 if (control != null) control.checkpoint();
                 if (response.statusCode() == 401) throw new AgentException("UNAUTHORIZED", "Business login is no longer valid");
                 if (response.statusCode() == 403) throw new AgentException("FORBIDDEN", "Video is outside your current scope");
+                if (path.startsWith("/internal/agent/content-identity?") && response.statusCode()==409)
+                    throw new AgentException("VIDEO_VERSION_CHANGED","Video changed while resolving read identity");
                 if (path.equals("/internal/agent/creator-publications") && Set.of(400,409,422).contains(response.statusCode())) {
                     String code = json.readTree(response.body()).path("code").asText();
                     if (Set.of("INVALID_DRAFT","DRAFT_CONFLICT").contains(code)) throw new AgentException(code,"请检查草稿内容与时间。");
@@ -261,6 +263,16 @@ final class RemoteBusinessAdapter implements IdentityPort, BusinessQueryPort, co
                     raw.dataAsOf(), raw.source(), raw.demo(), raw.audience());
         }
         catch (Exception e) { throw new AgentException("INVALID_EVIDENCE", "Analysis schema mismatch"); }
+    }
+    @Override public com.tianmu.agent.video.content.ContentReadAuthority.Identity current(long videoId, AccessScope viewer, CallControl control) {
+        if (!viewer.readableVideoIds().contains(videoId)) throw new AgentException("FORBIDDEN", "Video outside read scope");
+        JsonNode result=request("GET", "/internal/agent/content-identity?videoId="+videoId,
+                credentials.token(viewer.authorizationRef()), null, control);
+        try {
+            var identity=json.treeToValue(result,com.tianmu.agent.video.content.ContentReadAuthority.Identity.class);
+            if(identity.asset().videoId()!=videoId || !identity.asset().tenantId().equals(viewer.tenantId()))throw new IllegalArgumentException();
+            return identity;
+        }catch(Exception invalid){throw new AgentException("INVALID_EVIDENCE","Invalid content read identity");}
     }
     @Override public com.tianmu.agent.core.VideoContent.Source source(long videoId, AccessScope scope, CallControl control) {
         if (!scope.readableVideoIds().contains(videoId)) throw new AgentException("FORBIDDEN", "Video outside prepared scope");

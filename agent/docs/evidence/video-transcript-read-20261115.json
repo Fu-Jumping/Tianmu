@@ -1,0 +1,165 @@
+{
+  "date": "2026-11-15",
+  "baseCommit": "0d90c9b",
+  "deployed": false,
+  "chatIntegrationComplete": false,
+  "automaticWorkerEnabled": false,
+  "productionAsrAccepted": false,
+  "agentTests": {
+    "count": 68,
+    "reports": [
+      {
+        "class": "MysqlContentWorkIntegrationTest",
+        "tests": 23,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      {
+        "class": "ContentBoundaryTest",
+        "tests": 5,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      {
+        "class": "TimedTranscriptTest",
+        "tests": 5,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      {
+        "class": "TimedTranscriptionClientTest",
+        "tests": 4,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      {
+        "class": "HttpContentProcessingAuthorityTest",
+        "tests": 5,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      {
+        "class": "TranscriptQueryConfigurationTest",
+        "tests": 3,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      {
+        "class": "TranscriptQueryApiTest",
+        "tests": 1,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      {
+        "class": "BusinessAdapterTest",
+        "tests": 16,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      {
+        "class": "WaveClipTest",
+        "tests": 3,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      {
+        "class": "GovernanceArchitectureTest",
+        "tests": 3,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      }
+    ]
+  },
+  "businessTests": {
+    "count": 22,
+    "reports": [
+      {
+        "class": "BusinessContentAuthorityIntegrationTest",
+        "tests": 12,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      {
+        "class": "ContentProcessingControllerTest",
+        "tests": 3,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      {
+        "class": "ContentProcessingConfigurationTest",
+        "tests": 4,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      {
+        "class": "BusinessVideoContentTest",
+        "tests": 2,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      {
+        "class": "AudioOnlyExtractionIntegrationTest",
+        "tests": 1,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      }
+    ]
+  },
+  "commands": [
+    "mvn -B -ntp -f agent/pom.xml -Dspring.profiles.active=demo -Dtest=MysqlContentWorkIntegrationTest,ContentBoundaryTest,TimedTranscriptTest,TimedTranscriptionClientTest,HttpContentProcessingAuthorityTest,TranscriptQueryConfigurationTest,TranscriptQueryApiTest,BusinessAdapterTest,WaveClipTest,GovernanceArchitectureTest test",
+    "mvn -B -ntp -Dtest=BusinessContentAuthorityIntegrationTest,ContentProcessingControllerTest,ContentProcessingConfigurationTest,BusinessVideoContentTest,AudioOnlyExtractionIntegrationTest test",
+    "mvn -B -ntp -Dtest=AudioOnlyExtractionIntegrationTest test (rechecked after explicit PCM codec)",
+    "py -3 scripts/check_agent_governance.py",
+    "py -3 scripts/test_agent_governance.py",
+    "git diff --check"
+  ],
+  "realInfrastructure": [
+    "dedicated MySQL 8.4 database video_content_jobs_it; V1-V30 migrated",
+    "native loopback HTTP",
+    "real FFmpeg extracting audio-only synthetic MP4",
+    "private filesystem with SHA256 verification",
+    "committed FFmpeg-generated mono 16kHz 16-bit PCM WAV fixture"
+  ],
+  "scriptedDependencies": [
+    "MinIO stat and media bytes",
+    "transcription model during worker tests",
+    "media extraction during worker tests except dedicated FFmpeg test"
+  ],
+  "verified": [
+    "independent read flag while processing flag is off",
+    "viewer reauthorization without minting processing grants",
+    "reject entire response on source or revocation-epoch changes during file read",
+    "only matching SUCCEEDED stage version is readable",
+    "whole source clip boundary enforced despite past sentence timestamps",
+    "citation digest source version epoch and authorization revalidated",
+    "NO_TRANSCRIPT distinguished from silence",
+    "candidate byte text and concurrency budgets",
+    "WAV physical sample count matches declared duration before ASR dispatch",
+    "audio-only MP4 requires no visual extraction"
+  ],
+  "notExecuted": [
+    "full application suite",
+    "real MinIO end-to-end",
+    "real ASR quality acceptance",
+    "LLM/context/completion integration",
+    "UI citation/readiness integration",
+    "Run/Trace association",
+    "automatic task dispatch",
+    "production deployment"
+  ]
+}

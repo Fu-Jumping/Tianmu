@@ -76,6 +76,11 @@ public final class BusinessContentAuthority {
         var result=media.publicSample(grant.asset().videoId(),grant.asset().sourceVersion(),startMs,endMs);
         require(grant);return result;
     }
+    public BusinessVideoContent.Media readAudio(Grant grant,long startMs,long endMs) {
+        require(grant);
+        var result=media.publicAudioSample(grant.asset().videoId(),grant.asset().sourceVersion(),startMs,endMs);
+        require(grant);return result;
+    }
     public void revoke(UUID id) {
         db.update("UPDATE agent_media_processing_grant SET revoked_at=UTC_TIMESTAMP(6) WHERE grant_id=? AND tenant_id=? AND revoked_at IS NULL",id.toString(),tenant);
     }
