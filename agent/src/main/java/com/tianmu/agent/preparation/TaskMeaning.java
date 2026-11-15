@@ -102,8 +102,8 @@ public class TaskMeaning {
         if(page==null || page.playbackMs()==null || durationMs==null || durationMs<=0
                 || !Objects.equals(spec.conditions().get("video_id").toString(),page.videoId()))
             throw new com.tianmu.agent.core.AgentException("AMBIGUOUS_ANALYSIS_SOURCES","请指定要解释的播放时间点，或在视频页停到该片段后重试。");
-        long start=Math.max(0,page.playbackMs()-15_000),end=Math.min(durationMs,page.playbackMs()+15_000);
-        if(end<=start)throw new com.tianmu.agent.core.AgentException("AMBIGUOUS_ANALYSIS_SOURCES","播放位置已超出视频，请重新选择片段。");
+        long end=Math.min(durationMs,page.playbackMs()),start=Math.max(0,end-30_000);
+        if(end<=start)throw new com.tianmu.agent.core.AgentException("AMBIGUOUS_ANALYSIS_SOURCES","当前位置之前没有可分析的画面，请先播放一段视频或指定播放区间。");
         var values=new LinkedHashMap<String,Object>(spec.conditions());values.put("start_ms",start);values.put("end_ms",end);
         var provenance=new HashMap<String,String>(spec.provenance());provenance.put("start_ms","current_playback_default");provenance.put("end_ms","current_playback_default");
         var reading=spec.reading();
