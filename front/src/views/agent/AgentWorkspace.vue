@@ -48,13 +48,15 @@
           <button v-if="historyCursor" class="text-button" :disabled="loadingHistory" @click="loadOlderMessages">{{ loadingHistory ? '正在读取…' : '加载更早的消息' }}</button>
           <section v-if="!conversationTurns.length" class="workspace-intro">
             <div class="welcome-symbol" aria-hidden="true"><EchoMark /></div>
-            <h1>{{ form.videoId ? (creator ? '复盘这条视频' : '了解这条视频') : '把问题和想法理清楚' }}</h1>
-            <p>{{ form.videoId ? (creator ? '整理观众反馈、起草互动内容，或直接提问。' : '概括视频内容，或解释当前片段。') : '解释概念、整理思路，或一起制定计划。' }}</p>
-            <div class="suggestion-grid" :class="{ 'creator-suggestions': creator && form.videoId }">
+            <h1>{{ contextPending ? '正在确认视频访问权限' : form.videoId ? '了解这条视频' : '把问题和想法理清楚' }}</h1>
+            <p>{{ contextPending ? '确认后展示当前可用的功能。' : form.videoId ? (creator ? '了解视频内容，也可以使用作者专属功能整理反馈、起草互动内容。' : '根据可用画面概括内容，或解释当前片段。') : '解释概念、整理思路，或一起制定计划。' }}</p>
+            <section v-for="group in suggestionGroups" :key="group.id" class="suggestion-section" :aria-label="group.title || '常用提问'">
+            <h2 v-if="group.title" class="suggestion-heading">{{ group.title }}</h2>
+            <div class="suggestion-grid" :class="{ 'creator-suggestions': group.id === 'creator' }">
               <button
-                v-for="(item,index) in suggestions"
+                v-for="(item,index) in group.items"
                 :key="item.text"
-                :class="{ 'is-primary': creator && form.videoId && index === 0 }"
+                :class="{ 'is-primary': group.id === 'creator' && index === 0 }"
                 @click="useSuggestion(item)"
               >
                 <span class="suggestion-icon"><TraceIcon :name="item.icon" :size="16" /></span
@@ -63,6 +65,7 @@
                 ><i>↗</i>
               </button>
             </div>
+            </section>
           </section>
           <div v-if="notice" class="workspace-notice" role="alert">
             {{ notice
@@ -256,6 +259,7 @@
 import { mergeMessages, historicalTurns } from '@/agent/session-history.mjs';
 import { storeToRefs } from 'pinia';
 import { useAssistantStore } from '@/store/assistant';
+import { assistantSuggestionGroups } from '@/agent/suggestions.mjs';
 import EchoMark from '@/components/agent/EchoMark.vue';
 import TraceIcon from '@/components/trace/TraceIcon.vue';
 import ModelPicker from '@/components/agent/ModelPicker.vue';
@@ -338,22 +342,6 @@ onMounted(() => {
 const composerInput = ref(null),
   conversationElement = ref(null), conversationContent = ref(null);
 const { showJump, fadeStyle, scroll: trackConversationScroll, intent: markConversationIntent, jumpToLatest } = useConversationViewport(conversationElement, conversationContent);
-const generalSuggestions = [
-  { icon: 'question', title: '你能帮我做什么', description: '先了解助手的能力', text: '你能做什么？' },
-  { icon: 'list', title: '整理思路', description: '把想法变成清晰的步骤', text: '我想学习一项新技能，你可以怎么帮助我制定计划？' },
-  { icon: 'info', title: '解释概念', description: '用容易理解的例子说明', text: '用日常生活的例子解释什么是机器学习。' },
-  { icon: 'route', title: '制定计划', description: '按时间和目标安排步骤', text: '帮我制定每天二十分钟的摄影入门学习计划。' },
-];
-const viewerSuggestions = [
-  { icon: 'play', title: '概括视频', description: '根据可用画面了解内容', text: '概括这个视频的画面内容。' },
-  { icon: 'clock', title: '解释当前片段', description: '结合当前播放位置提问', text: '解释这个视频当前播放位置附近的画面。' },
-];
-const videoSuggestions = [
-  { icon: 'list', title: '观众反馈报告', description: '整理弹幕与评论，查看主要话题和观众原话', text: '请分析这个视频全部的弹幕和评论，结合实际视频画面生成观众反馈报告，包含主要话题、观众原话和改进建议。' },
-  { icon: 'stage', title: '智能评论', description: '生成作者评论草稿，确认后再发送', text: '请为这个视频生成3条智能评论草稿，以作者身份补充说明或引导讨论，先给我预览。' },
-  { icon: 'play', title: '智能弹幕', description: '结合画面起草，核对内容与时间点', text: '请为这个视频生成5条智能弹幕草稿，以作者身份自然引导互动，标明播放时间点，先给我预览。' },
-  { icon: 'token', title: '互动统计', description: '查看弹幕、评论数量与活跃观众', text: '请统计这个视频全部的弹幕数量和评论数量，并列出互动最活跃的观众。' },
-];
 const modelChoices = ref([]), selectedModel = ref(''), modelError = ref(''), modelsLoading = ref(false);
 async function refreshModels() {
   modelsLoading.value = true; modelError.value = '';
@@ -369,8 +357,8 @@ const router = useRouter(),
   route = useRoute(),
   userStore = useUserStore();
 const form = reactive({ videoId: '', ...yesterdayRange() });
-const suggestions = computed(() => form.videoId ? (props.creator ? videoSuggestions : viewerSuggestions) : generalSuggestions);
-const quickSuggestions = computed(() => form.videoId ? (props.creator ? videoSuggestions.slice(0, 3) : viewerSuggestions) : [generalSuggestions[1], generalSuggestions[2]]);
+const suggestionGroups = computed(() => assistantSuggestionGroups({ videoId: form.videoId, creator: props.creator, pending: props.contextPending }));
+const quickSuggestions = computed(() => suggestionGroups.value.flatMap(group => group.items));
 const contextTitle = computed(() => (props.videoId === form.videoId ? props.videoTitle : ''));
 const currentQueryRun = computed(() =>
   props.managed ? assistant.runId : props.embedded ? route.query.assistantRunId : route.query.runId
@@ -743,7 +731,7 @@ readHistory();
 if (props.managed) {
   try { assistant.runId = route.query.runId || route.query.assistantRunId || sessionStorage.getItem(`assistant_run_${ownerId.value}`) || ''; } catch { /* optional */ }
 }
-watch(() => props.videoId, id => { if (props.managed) form.videoId = id || ''; }, { immediate: true });
+watch(() => props.videoId, id => { if (props.managed) form.videoId = id || ''; }, { immediate: true, flush: 'sync' });
 watch(() => route.query.runId || route.query.assistantRunId, id => { if (props.managed && validRunId(id)) assistant.runId = id; });
 watch(
   () => [currentQueryRun.value, props.videoId || route.query.videoId],
@@ -791,6 +779,9 @@ onBeforeUnmount(() => {
 </script>
 
 <style scoped>
+.suggestion-section {margin-top:20px;}
+.suggestion-heading {font-size:12px;font-weight:500;color:var(--workbench-muted);margin:0 0 8px;}
+.suggestion-section .suggestion-grid {margin-top:0;}
 .model-select {max-width:150px;min-height:32px;border:1px solid var(--workbench-border);border-radius:8px;background:var(--workbench-raised);color:var(--workbench-ink);padding:4px 8px;}
 .trace-id-reply { display: block; overflow-wrap: anywhere; margin: 12px 0; user-select: all; }
 .agent-workspace {

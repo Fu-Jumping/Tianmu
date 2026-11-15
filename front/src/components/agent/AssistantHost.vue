@@ -19,10 +19,11 @@ import { useAssistantStore } from '@/store/assistant'
 import { principalKey } from '@/lib/auth-session.mjs'
 import { watchAssistantIdentity } from '@/lib/assistant-session.mjs'
 import { getAssistantCapabilities } from '@/api/agent'
+import { watchAssistantCapabilities } from '@/lib/assistant-capabilities.mjs'
 const AgentWorkspace = defineAsyncComponent(() => import('@/views/agent/AgentWorkspace.vue'))
 function dismiss(event) { if (!event.isComposing && event.keyCode !== 229) assistant.open = false }
 const route = useRoute(), router = useRouter(), users = useUserStore(), assistant = useAssistantStore()
-const readable = ref(false), creator = ref(false), checking = ref(false), capabilityError = ref(''), mounted = ref(false)
+const mounted = ref(false)
 const fullPage = computed(() => route.name === 'AgentWorkspace')
 const isHome = computed(() => route.name === 'Index')
 const pageScrolled = ref(window.scrollY > 360)
@@ -30,7 +31,7 @@ function measureScroll() { pageScrolled.value = window.scrollY > 360 }
 const allowedPage = computed(() => route.name !== 'TraceWorkspace')
 const visible = computed(() => allowedPage.value && (fullPage.value || assistant.open))
 const ownerKey = computed(() => principalKey(users.user))
-const accountKey = computed(() => String(users.user.userId || '') + ':' + String(users.user.token || ''))
+const accountKey = computed(() => JSON.stringify([principalKey(users.user), users.user.token || '']))
 const pageVideo = computed(() => String(route.params.videoId || (fullPage.value ? route.query.videoId || '' : '')))
 const pageMetadata = computed(() => assistant.page?.videoId === pageVideo.value ? assistant.page : {})
 const panel = ref(null), drawerStyle = ref({})
@@ -69,20 +70,12 @@ function outside(event) {
 onMounted(() => { document.addEventListener('pointerdown', outside); window.addEventListener('resize', measureDrawer); window.addEventListener('scroll', measureScroll, { passive: true }) })
 onBeforeUnmount(() => { document.removeEventListener('pointerdown', outside); window.removeEventListener('resize', measureDrawer); window.removeEventListener('scroll', measureScroll); playerObserver?.disconnect(); pageObserver?.disconnect(); cancelAnimationFrame(geometryFrame) })
 watch([visible, pageVideo], () => nextTick(observePage), { immediate: true })
-let ticket = 0
-async function refreshCapabilities() {
-  const current = ++ticket
-  if (assistant.page?.videoId !== pageVideo.value) assistant.page = null
-  readable.value = false; creator.value = false; capabilityError.value = ''; checking.value = users.isLogin
-  if (!users.isLogin) return
-  try {
-    const result = await getAssistantCapabilities(pageVideo.value)
-    if (current === ticket) { creator.value = result.creatorTools === true; readable.value = result.videoContext === true }
-  } catch (error) { if (current === ticket) capabilityError.value = error.message }
-  finally { if (current === ticket) checking.value = false }
-}
 watchAssistantIdentity(users, assistant, () => { mounted.value = false })
-watch([pageVideo, accountKey], refreshCapabilities, { immediate: true })
+const { readable, creator, checking, error: capabilityError, refresh: refreshCapabilities, stop: stopCapabilities } = watchAssistantCapabilities({
+  videoId: pageVideo, accountKey, isLogin: computed(() => users.isLogin), load: getAssistantCapabilities,
+  onRefresh() { if (assistant.page?.videoId !== pageVideo.value) assistant.page = null },
+})
+onBeforeUnmount(stopCapabilities)
 watch([visible, accountKey], () => { if (visible.value && users.isLogin) mounted.value = true }, { immediate: true })
 watch(() => route.query.assistant, value => { if (value === '1') assistant.show() }, { immediate: true })
 </script>
