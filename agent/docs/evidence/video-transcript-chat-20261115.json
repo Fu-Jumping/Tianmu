@@ -1,0 +1,210 @@
+{
+  "date": "2026-11-15",
+  "baseCommit": "270011d",
+  "branch": "codex/video-assistant-production",
+  "deployed": false,
+  "realUserEntryEnabled": false,
+  "defaultEnabled": false,
+  "productionAsrAccepted": false,
+  "tests": {
+    "distinctCount": 144,
+    "reports": [
+      {
+        "class": "com.tianmu.agent.GovernanceArchitectureTest",
+        "tests": 3,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      {
+        "class": "com.tianmu.agent.adapters.business.BusinessAdapterTest",
+        "tests": 16,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      {
+        "class": "com.tianmu.agent.application.TranscriptChatIntegrationTest",
+        "tests": 12,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      {
+        "class": "com.tianmu.agent.harness.AnalysisAdmissionTest",
+        "tests": 4,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      {
+        "class": "com.tianmu.agent.harness.CatalogArchitectureTest",
+        "tests": 13,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      {
+        "class": "com.tianmu.agent.harness.EntryArchitectureTest",
+        "tests": 12,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      {
+        "class": "com.tianmu.agent.harness.HarnessLifecycleTest",
+        "tests": 10,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      {
+        "class": "com.tianmu.agent.harness.PolicySnapshotContractTest",
+        "tests": 8,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      {
+        "class": "com.tianmu.agent.harness.ProgressiveToolsTest",
+        "tests": 6,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      {
+        "class": "com.tianmu.agent.memory.MemoryLearningPolicyTest",
+        "tests": 6,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      {
+        "class": "com.tianmu.agent.memory.PersonalMemoryTest",
+        "tests": 3,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      {
+        "class": "com.tianmu.agent.video.TimedTranscriptionClientTest",
+        "tests": 4,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      {
+        "class": "com.tianmu.agent.video.content.ContentBoundaryTest",
+        "tests": 5,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      {
+        "class": "com.tianmu.agent.video.content.HttpContentProcessingAuthorityTest",
+        "tests": 5,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      {
+        "class": "com.tianmu.agent.video.content.MysqlContentWorkIntegrationTest",
+        "tests": 24,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      {
+        "class": "com.tianmu.agent.video.content.TimedTranscriptTest",
+        "tests": 5,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      {
+        "class": "com.tianmu.agent.video.content.TranscriptQueryApiTest",
+        "tests": 1,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      {
+        "class": "com.tianmu.agent.video.content.TranscriptQueryConfigurationTest",
+        "tests": 4,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      {
+        "class": "com.tianmu.agent.video.content.WaveClipTest",
+        "tests": 3,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      }
+    ],
+    "mysqlContentTests": 24,
+    "logs": [
+      "transcript-chat-acceptance.log",
+      "transcript-chat-policy-tests.log"
+    ]
+  },
+  "verification": [
+    "mvn -B -ntp -f agent/pom.xml -Dspring.profiles.active=demo -Dtest=GovernanceArchitectureTest,BusinessAdapterTest,TranscriptChatIntegrationTest,AnalysisAdmissionTest,CatalogArchitectureTest,EntryArchitectureTest,HarnessLifecycleTest,PolicySnapshotContractTest,ProgressiveToolsTest,MemoryLearningPolicyTest,PersonalMemoryTest,TimedTranscriptionClientTest,ContentBoundaryTest,HttpContentProcessingAuthorityTest,MysqlContentWorkIntegrationTest,TimedTranscriptTest,TranscriptQueryApiTest,TranscriptQueryConfigurationTest,WaveClipTest test (AGENT_CONTENT_IT=true; dedicated AGENT_CONTENT_JDBC_URL required)",
+    "py -3 scripts/check_agent_governance.py",
+    "py -3 scripts/test_agent_governance.py",
+    "git diff --check"
+  ],
+  "realInfrastructure": [
+    "local dedicated MySQL 8.4 video_content_jobs_it, existing V1-V30 migrations validated",
+    "MysqlRunRepository evidence registration and separate repository reload with audio-transcript-v1",
+    "private filesystem evidence artifact storage",
+    "OpenTelemetry SDK spans emitted by actual tool and delivery chain"
+  ],
+  "scriptedDependencies": [
+    "TranscriptRetrievalService identity/query/citation in foreground runtime tests",
+    "answering model in runtime tests",
+    "transcription model in content worker tests"
+  ],
+  "implemented": [
+    "server-side pinned content task and version/epoch/stage/boundary",
+    "read_video_transcript with no model-controlled video or interval",
+    "separate immutable audio-transcript-v1 evidence and durable reader support",
+    "host response without an extra answering model call when excerpts are absent",
+    "transcript source authority at model dispatch barrier and terminal answer/clarification",
+    "buffered provider text until validated terminal delivery",
+    "citation text/timing/precision revalidation",
+    "unproven history summary persistent memory and compaction excluded in experimental video-page context",
+    "natural continuation requests require renewed explicit playback context",
+    "acceptance availability marker and strong revision check only for bound transcript tasks",
+    "unrelated creator and ordinary tasks survive transcript toggle/policy changes",
+    "restore verifies task before reloading content context"
+  ],
+  "review": {
+    "independent": true,
+    "result": "accepted only as default-off controlled server-side batch; no new confirmed P0/P1 in final read-only review; actual tests required",
+    "closedFindings": [
+      "disabled authority cannot fall back during delivery",
+      "natural followup cannot silently reload unproven history",
+      "source revoke during PRE_MODEL gate prevents provider dispatch",
+      "clarification terminal receives live source checks",
+      "transcript revisions do not invalidate unrelated tasks",
+      "new persisted evidence discriminator recognized before metric fallback"
+    ]
+  },
+  "launchBlockers": [
+    "player-loaded media version is not yet bound to request",
+    "normal multi-turn content dependency projection is not implemented",
+    "production ASR/math-course quality and performance not accepted",
+    "no automatic content scheduling/cold wait/frontend readiness or citation UI",
+    "background producer to foreground Run/Trace association not integrated"
+  ],
+  "rollback": "After new evidence writers are enabled, retain a reader that understands audio-transcript-v1; turning off the switch does not make older binaries compatible.",
+  "notExecuted": [
+    "full application suite",
+    "production deployment",
+    "real provider quality tests",
+    "real MinIO end-to-end",
+    "browser UX acceptance"
+  ]
+}

@@ -14,6 +14,7 @@ import java.util.*;
 @Component
 public class DeliveryService implements com.tianmu.agent.runtime.spi.ResponseDelivery {
     private final RuntimeHarness harness;
+    @org.springframework.beans.factory.annotation.Autowired(required=false) private TranscriptChatService transcriptChat;
     @org.springframework.beans.factory.annotation.Autowired private com.tianmu.agent.runtime.spi.CompletionEvaluator completion=new BusinessCompletionEvaluator();
     public DeliveryService(RuntimeHarness harness) { this.harness = harness; }
     /** Host-created acknowledgement after a durable application receipt; no model claim. */
@@ -27,6 +28,12 @@ public class DeliveryService implements com.tianmu.agent.runtime.spi.ResponseDel
         });
     }
     public void clarification(RunState run, String question) { clarification(run, question, reserve(run)); }
+    private void verifyContentTerminal(RunState run) {
+        if(run.task()!=null && run.task().specification().typed() instanceof com.tianmu.agent.core.TaskConditions.Transcript) {
+            if(transcriptChat==null)throw new AgentException("CONTENT_RESULT_UNAVAILABLE","Transcript authority is disabled");
+            transcriptChat.verify(run);
+        }
+    }
     public TurnControl.Reservation reserve(RunState run) {
         run.checkpoint();
         run.verifyMemory();
@@ -54,6 +61,7 @@ public class DeliveryService implements com.tianmu.agent.runtime.spi.ResponseDel
             String clarification = harness.transform(run, TransformPoint.CLARIFICATION, text);
             run.checkpoint();
             run.verifyMemory();
+            verifyContentTerminal(run);
             run.clarify(reservation, clarification);
             return clarification;
         });
@@ -84,10 +92,14 @@ public class DeliveryService implements com.tianmu.agent.runtime.spi.ResponseDel
                 AnalysisExecutionPolicy.requireComplete(run.task().specification(), evidence);
                 AnalysisExecutionPolicy.requireTopicsRead(run.task().specification(), evidence, run.execution().exchanges());
             }
+            if(run.task()!=null && run.task().specification().typed() instanceof com.tianmu.agent.core.TaskConditions.Transcript && transcriptChat==null)
+                throw new AgentException("CONTENT_RESULT_UNAVAILABLE","Transcript authority is disabled; restart after restoring its policy");
+            if(transcriptChat!=null)transcriptChat.verifyDelivery(run,answer);
             List<AnswerNote> notes = EvidencePresentation.notes(evidence);
             answer = new Answer(answer.text(), answer.evidenceIds(), notes);
             run.checkpoint();
             run.verifyMemory();
+            verifyContentTerminal(run);
             run.succeed(reservation, answer, reason);
             return answer;
         });

@@ -422,6 +422,11 @@ public class ToolDispatcher {
                 throw new com.tianmu.agent.core.AgentException("TASK_CONSTRAINT_VIOLATION", "草稿对象或类型与用户请求不一致。");
         }
         public void checkVideoQuery(long videoId, Long startMs, Long endMs) { business.checkVideoQuery(run, videoId, startMs, endMs); }
+        public com.tianmu.agent.core.TranscriptContent.Context transcriptContext(){
+            if(run.task()==null || !(run.task().specification().typed() instanceof com.tianmu.agent.core.TaskConditions.Transcript t))throw new AgentException("TASK_CONSTRAINT_VIOLATION","Frozen transcript task required");
+            return t.context();
+        }
+        public Evidence registerTranscriptEvidence(com.tianmu.agent.core.TranscriptContent.Facts facts){return business.registerTranscriptEvidence(run,facts);}
         public Evidence registerVideoEvidence(com.tianmu.agent.core.VideoContent.Facts facts) { return business.registerVideoEvidence(run, facts); }
         public void checkDanmakuQuery(com.tianmu.agent.core.DanmakuTypes.Query query) { business.checkDanmakuQuery(run, query); }
         public Evidence registerDanmakuEvidence(com.tianmu.agent.core.DanmakuTypes.Dataset data) { return business.registerDanmakuEvidence(run, data); }

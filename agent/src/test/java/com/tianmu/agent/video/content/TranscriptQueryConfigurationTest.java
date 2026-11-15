@@ -15,7 +15,8 @@ import static org.mockito.Mockito.*;
 class TranscriptQueryConfigurationTest {
     @TempDir Path directory;
     private ApplicationContextRunner context(){return new ApplicationContextRunner()
-            .withUserConfiguration(TranscriptQueryConfiguration.class,TranscriptQueryController.class)
+            .withUserConfiguration(TranscriptQueryConfiguration.class,TranscriptQueryController.class,com.tianmu.agent.application.TranscriptChatService.class)
+            .withBean(io.opentelemetry.api.trace.Tracer.class,()->io.opentelemetry.api.OpenTelemetry.noop().getTracer("test"))
             .withBean(HikariDataSource.class,()->mock(HikariDataSource.class)).withBean(Flyway.class,()->mock(Flyway.class))
             .withBean(ObjectMapper.class,()->new ObjectMapper().findAndRegisterModules())
             .withBean(IdentityPort.class,()->mock(IdentityPort.class)).withBean(ContentReadAuthority.class,()->mock(ContentReadAuthority.class));}
@@ -27,5 +28,12 @@ class TranscriptQueryConfigurationTest {
     @Test void invalidQuotaPreventsActivation(){
         context().withPropertyValues("agent.video.transcript-query.enabled=true","agent.video.transcript-query.stage-version=asr-v1","agent.video.transcript-query.result-directory="+directory,"agent.video.transcript-query.concurrent-queries=0")
                 .run(c->assertThat(c).hasFailed());
+    }
+    @Test void chatRequiresExplicitQueryServiceAndIsOffWhenOnlyQueryIsEnabled(){
+        context().withPropertyValues("agent.video.transcript-chat.enabled=true").run(c->assertThat(c).hasFailed());
+        context().withPropertyValues("agent.video.transcript-query.enabled=true","agent.video.transcript-query.stage-version=asr-v1","agent.video.transcript-query.result-directory="+directory)
+                .run(c->{assertThat(c).hasNotFailed();assertThat(c).doesNotHaveBean(com.tianmu.agent.application.TranscriptChatService.class);});
+        context().withPropertyValues("agent.video.transcript-query.enabled=true","agent.video.transcript-chat.enabled=true","agent.video.transcript-query.stage-version=asr-v1","agent.video.transcript-query.result-directory="+directory)
+                .run(c->{assertThat(c).hasNotFailed();assertThat(c).hasSingleBean(com.tianmu.agent.application.TranscriptChatService.class);});
     }
 }

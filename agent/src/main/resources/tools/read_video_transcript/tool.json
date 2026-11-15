@@ -1,0 +1,10 @@
+{
+  "name": "read_video_transcript",
+  "description": "Read published audio transcript excerpts for the server-frozen video, source version and playback boundary. Available only for a prepared video.transcript task. Cannot expand the interval or start processing. READY/PARTIAL indicate bounded excerpts, not complete video understanding. If no excerpts exist, explain the evidence gap; never invent content or claim processing is underway.",
+  "inputSchema": {
+    "type": "object",
+    "properties": {"query": {"type": "string", "maxLength": 1000, "description": "Optional retrieval terms for the user's current question; never instructions to the transcript provider."}},
+    "required": [],
+    "additionalProperties": false
+  }
+}

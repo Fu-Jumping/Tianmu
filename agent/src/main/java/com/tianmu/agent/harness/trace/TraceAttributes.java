@@ -52,6 +52,8 @@ public final class TraceAttributes {
             "context.request_bytes", "context.tools_bytes", "context.message_bytes", "context.system_bytes", "context.user_bytes", "context.assistant_bytes", "context.tool_result_bytes", "context.duplicate_result_bytes", "context.history_bytes", "context.results_compacted", "context.compaction_segments",
             "usage.attempted_calls", "usage.unreported_calls", "usage.cache_miss_tokens", "usage.cache_reported_calls", "model.dispatched",
             "analysis.retry_wait_ms", "analysis.validation_issue", "analysis.result_accepted", "analysis.semantic_review_passed", "analysis.reviewed_topics", "analysis.review_excluded_topics", "video.topic_frame_modes",
+            "content.mode", "content.boundary_start_ms", "content.boundary_end_ms", "content.source_version", "content.epoch", "content.stage_version",
+            "content.read_status", "content.excerpt_count", "content.gap_count", "content.limitations", "content.history_excluded", "content.history_policy",
             "io.feedback_object_ms", "io.feedback_object_calls", "io.feedback_database_ms", "io.feedback_database_calls");
     public static Map<String, Object> sanitize(Map<String, ?> values) {
         Map<String, Object> clean = new TreeMap<>();

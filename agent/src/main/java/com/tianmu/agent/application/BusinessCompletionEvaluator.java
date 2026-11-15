@@ -11,7 +11,7 @@ import java.util.*;
 public final class BusinessCompletionEvaluator implements CompletionEvaluator {
     private final Map<String,CompletionOwner> owners;
     private final List<CompletionRequirement> requirements;
-    public BusinessCompletionEvaluator(){this(List.of(new ReportOwner(),new DraftOwner(),new GeneralOwner()));}
+    public BusinessCompletionEvaluator(){this(List.of(new ReportOwner(),new DraftOwner(),new TranscriptCompletionOwner(),new GeneralOwner()));}
     public BusinessCompletionEvaluator(List<CompletionOwner> registered){
         this(registered,List.of(new EvidenceCompletionRequirement()));
     }

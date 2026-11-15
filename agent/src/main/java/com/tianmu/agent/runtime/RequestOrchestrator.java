@@ -66,9 +66,10 @@ public class RequestOrchestrator {
     public void resume(RunState run){
         try{assembler.verifyPolicy(run.executionPolicy());harness.execute(run,()->{
             if(run.snapshot().status()!=Status.RUNNING || run.task()==null)throw new AgentException("INVALID_OPERATION_STATE","No resumable prepared task");
+            assembler.verify(run.task());
             boolean direct=runtime.canCompleteWithoutModel(run);
             contexts.resume(run,direct);
-            assembler.verify(run.task());runtime.runPrepared(run,run.task());
+            runtime.runPrepared(run,run.task());
         });}
         catch(AgentException e){run.fail(e.code());}catch(Exception e){run.fail("INTERNAL_ERROR");}
     }

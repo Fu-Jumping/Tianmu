@@ -19,7 +19,7 @@ import com.tianmu.agent.harness.trace.*;
 
 @Component
 public class AgentRuntime {
-    @org.springframework.beans.factory.annotation.Autowired(required=false) private com.tianmu.agent.runtime.spi.ContextAuthority contextAuthority;
+    @org.springframework.beans.factory.annotation.Autowired(required=false) private java.util.List<com.tianmu.agent.runtime.spi.ContextAuthority> contextAuthorities=java.util.List.of();
     @org.springframework.beans.factory.annotation.Autowired(required=false) private ToolBatchExecutor toolBatches;
     @org.springframework.beans.factory.annotation.Autowired(required=false) private ToolBatchLedger batchLedger;
     private static final Logger log = LoggerFactory.getLogger(AgentRuntime.class);
@@ -144,15 +144,19 @@ public class AgentRuntime {
                 });
     }
     private Decision decide(RunState run, ModelContext context) {
-        if(contextAuthority!=null)contextAuthority.verify(run);
+        for(var authority:contextAuthorities)authority.verify(run);
         return harness.stage(run, context.finalizing() ? "agent.model.finalize" : "agent.model", HookPoint.PRE_MODEL, HookPoint.POST_MODEL,
                 Map.of("run.finalizing", context.finalizing(), "loop.step", run.snapshot().steps(),
                         "agent.available_tools", context.availableTools().stream().map(ToolDefinition::name).limit(32).toList()), () -> {
             TraceDetails.capture("input", context, "MODEL_CONTEXT");
             TraceAttributes.apply(io.opentelemetry.api.trace.Span.current(), Map.of("model.name", run.modelOr(model).modelName() == null ? "unspecified" : run.modelOr(model).modelName(),
                     "model.streaming", run.modelOr(model).streamsText(), "model.first_token_state", run.modelOr(model).streamsText()?"PENDING":"NOT_APPLICABLE"));
-            Decision raw = harness.modelCall(run, context.finalizing(), control -> context.finalizing()
-                    ? run.modelOr(model).finalizeWithoutTools(context, control) : run.modelOr(model).decide(context, control));
+            Decision raw = harness.modelCall(run, context.finalizing(), control -> {
+                var guarded=control.withDispatchBarrier(()->{control.dispatchBarrier().run();for(var authority:contextAuthorities)authority.verify(run);});
+                if(contextAuthorities.stream().anyMatch(authority->!authority.permitsStreaming(run)))guarded=guarded.withTextOutput(text->{});
+                guarded.beforeDispatch();
+                return context.finalizing()?run.modelOr(model).finalizeWithoutTools(context,guarded):run.modelOr(model).decide(context,guarded);
+            });
             if (raw == null || raw.kind() == null) throw new AgentException("INVALID_DECISION", "Missing model decision");
             return harness.transform(run, TransformPoint.MODEL_RESULT, raw);
         });

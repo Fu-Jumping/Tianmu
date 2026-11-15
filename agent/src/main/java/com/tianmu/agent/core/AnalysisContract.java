@@ -24,7 +24,7 @@ public record AnalysisContract(Set<Source> sources, boolean reportRequired, Long
             case "danmaku.report" -> new AnalysisContract(Set.of(Source.DANMAKU), true);
             case "danmaku.overview", "video.metric" -> new AnalysisContract(Set.of(Source.DANMAKU), false);
             case "comments.analysis" -> new AnalysisContract(Set.of(Source.COMMENT), false);
-            case "video.content", "creator.draft" -> new AnalysisContract(Set.of(Source.VIDEO), false);
+            case "video.content", "video.transcript", "creator.draft" -> new AnalysisContract(Set.of(Source.VIDEO), false);
             default -> null;
         };
     }

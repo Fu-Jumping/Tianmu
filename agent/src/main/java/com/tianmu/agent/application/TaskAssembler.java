@@ -20,6 +20,7 @@ public class TaskAssembler {
     private final Map<String,String> canonicalLegacyVersions;
     private final Set<String> registrySnapshot;
     private final TaskMeaning meaning;
+    @org.springframework.beans.factory.annotation.Autowired(required=false) private TranscriptChatService transcriptChat;
     private com.tianmu.agent.feedback.FeedbackPolicy feedbackPolicy=com.tianmu.agent.feedback.FeedbackPolicy.defaults();
     private com.tianmu.agent.feedback.FeedbackCompressionProperties compression=com.tianmu.agent.feedback.FeedbackCompressionProperties.defaults();
     @org.springframework.beans.factory.annotation.Autowired
@@ -57,6 +58,14 @@ public class TaskAssembler {
         boolean conversation = "unclassified".equals(specification.type())
                 && Set.of(com.tianmu.agent.core.PreparationTypes.Intent.KNOWLEDGE, com.tianmu.agent.core.PreparationTypes.Intent.OTHER).contains(preparation.intent());
         if (conversation) specification = new Specification("conversation", Map.of(), Map.of());
+        if(TranscriptChatService.eligible(specification)) {
+            String accepted=run.executionPolicy()==null?null:run.executionPolicy().business().resources().get("transcript:chat");
+            if(run.executionPolicy()==null){if(transcriptChat!=null)specification=transcriptChat.bind(run,specification);}
+            else if(accepted!=null) {
+                if(transcriptChat==null || !accepted.equals(transcriptChat.revision()))throw new com.tianmu.agent.core.AgentException("RESOURCE_VERSION_MISMATCH","Accepted transcript policy is unavailable");
+                specification=transcriptChat.bind(run,specification);
+            }
+        }
         // Field provenance survives accepted rewrites: page values and Skill defaults remain distinct.
         boolean feedback=false;
         try{FeedbackTaskPolicy.request(specification);feedback=true;}
@@ -73,9 +82,13 @@ public class TaskAssembler {
         }
         if(feedback)run.executionWindow(feedbackPolicy.timeout());
         return new PreparedTask(run.id, run.message, preparation.query(), run.businessDate, "Asia/Shanghai", run.owner,
-                preparation, specification, pinCompression(legacyVersions,feedback,specification), registrySnapshot, run.deadline(), run.modelCallLimit());
+                preparation, specification, pinTranscript(pinCompression(legacyVersions,feedback,specification)), registrySnapshot, run.deadline(), run.modelCallLimit());
     }
-    public Map<String,String> resourceVersions(){return pinCompression(versions,false,null);}
+    private Map<String,String> pinTranscript(Map<String,String> resources){
+        if(transcriptChat==null)return resources;
+        var pinned=new TreeMap<>(resources);pinned.put("transcript:chat",transcriptChat.revision());return Map.copyOf(pinned);
+    }
+    public Map<String,String> resourceVersions(){return pinTranscript(pinCompression(versions,false,null));}
     private static String contentFingerprint(String content) {
         try{return HexFormat.of().formatHex(java.security.MessageDigest.getInstance("SHA-256").digest(content.replace("\r\n","\n").getBytes(java.nio.charset.StandardCharsets.UTF_8)));}
         catch(java.security.NoSuchAlgorithmException impossible){throw new IllegalStateException(impossible);}
@@ -85,6 +98,8 @@ public class TaskAssembler {
         if(!compatibleResources(policy.business().resources()))throw new com.tianmu.agent.core.AgentException("RESOURCE_VERSION_MISMATCH","Pinned preparation resources are unavailable");
     }
     private boolean compatibleResources(Map<String,String> stored) {
+        if(stored.containsKey("transcript:chat")){var base=new TreeMap<>(stored);base.remove("transcript:chat");stored=base;}
+
         if(stored.containsKey(COMPRESSION_RESOURCE)){
             if(!stored.get(COMPRESSION_RESOURCE).equals(compressionRevision()) || !compression.enabled())return false;
             var base=new TreeMap<>(stored);base.remove(COMPRESSION_RESOURCE);stored=base;
@@ -101,7 +116,9 @@ public class TaskAssembler {
         } catch (Exception e) { throw new IllegalStateException("Cannot fingerprint tool definition"); }
     }
     public void verify(PreparedTask task){
-        if(task==null || !compatibleResources(task.resourceVersions()) || !registrySnapshot.equals(task.allowedTools()))
+        boolean transcript=task!=null && task.specification().typed() instanceof com.tianmu.agent.core.TaskConditions.Transcript;
+        if(task==null || transcript && (transcriptChat==null || !transcriptChat.revision().equals(task.resourceVersions().get("transcript:chat")))
+                || !compatibleResources(task.resourceVersions()) || !registrySnapshot.equals(task.allowedTools()))
             throw new com.tianmu.agent.core.AgentException("RESOURCE_VERSION_MISMATCH","Prepared task resources changed; restart with the new version");
     }
 }

@@ -68,6 +68,14 @@ public final class BusinessEvidencePolicy {
             Evidence value = new Evidence("ev_" + UUID.randomUUID(), run.runId(), run.scope(), null, null, facts);
             run.evidenceStore().put(value); return value;
         }
+        public Evidence registerTranscriptEvidence(EvidenceContext run,com.tianmu.agent.core.TranscriptContent.Facts facts) {
+            run.checkpoint();
+            if(run.task()==null || !(run.task().specification().typed() instanceof TaskConditions.Transcript frozen)
+                    || !frozen.context().equals(facts.context()) || !run.scope().tenantId().equals(facts.context().tenantId()) || !run.scope().readableVideoIds().contains(facts.context().videoId()))
+                throw new AgentException("INVALID_EVIDENCE","Transcript differs from the frozen task");
+            Evidence value=new Evidence("ev_"+UUID.randomUUID(),run.runId(),run.scope(),null,null,null,null,null,null,null,facts);
+            run.evidenceStore().put(value);return value;
+        }
         public void checkDanmakuQuery(EvidenceContext run, com.tianmu.agent.core.DanmakuTypes.Query query) {
             run.checkpoint(); query.checkTime(Instant.now());
             if (!run.scope().videoIds().contains(query.videoId())) throw new AgentException("FORBIDDEN", "videoId is outside scope");

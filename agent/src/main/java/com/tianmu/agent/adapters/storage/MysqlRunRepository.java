@@ -405,6 +405,7 @@ public final class MysqlRunRepository implements RunRepository, ReportStore, Con
         }
     }
     private Evidence evidenceFacts(String id, Meta m, Object facts) {
+        if("audio-transcript-v1".equals(decode(facts,Map.class).get("kind")))return new Evidence(id,m.id(),m.owner(),null,null,null,null,null,null,null,decode(facts,com.tianmu.agent.core.TranscriptContent.Facts.class));
         if("resource-lookup-v1".equals(decode(facts,Map.class).get("kind")))return new Evidence(id,m.id(),m.owner(),null,null,null,null,null,null,decode(facts,com.tianmu.agent.core.LookupFacts.class));
         if(decode(facts,Map.class).containsKey("jobId"))
             return new Evidence(id,m.id(),m.owner(),null,null,null,null,null,decode(facts,com.tianmu.agent.core.FeedbackAnalysis.Binding.class));
@@ -419,6 +420,7 @@ public final class MysqlRunRepository implements RunRepository, ReportStore, Con
         return new Evidence(id, m.id(), m.owner(), decode(facts, MetricData.class));
     }
     private Object evidenceQuery(Evidence value) {
+        if(value.transcript()!=null)return Map.of("kind",value.transcript().kind(),"context",value.transcript().context(),"requested",value.transcript().requested());
         if(value.lookup()!=null)return value.lookup();
         if(value.feedback()!=null)return Map.of("kind","feedback-analysis-v1","jobId",value.feedback().jobId(),"request",value.feedback().request(),"snapshotHash",value.feedback().snapshotHash());
         if(value.reportCheckpoint()!=null)return Map.of("kind",value.reportCheckpoint().kind(),"evidence",value.reportCheckpoint().evidenceId(),"offset",value.reportCheckpoint().classification().offset(),"merged",value.reportCheckpoint().classification().merged());

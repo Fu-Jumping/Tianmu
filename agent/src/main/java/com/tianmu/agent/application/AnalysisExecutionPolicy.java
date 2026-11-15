@@ -10,6 +10,8 @@ import static com.tianmu.agent.core.AnalysisContract.Source.*;
 public final class AnalysisExecutionPolicy {
     private AnalysisExecutionPolicy() {}
     public static boolean permits(String tool, Specification spec) {
+        if(tool.equals("read_video_transcript"))return spec!=null && spec.type().equals("video.transcript");
+        if(spec!=null && spec.type().equals("video.transcript"))return Set.of("read_skill","ask_clarification","read_video_transcript").contains(tool);
         if(spec!=null && tool.equals("prepare_creator_interactions"))return false;
         if(spec!=null && spec.type().equals("resource.lookup"))return Set.of("read_skill","read_history","read_result","ask_clarification","search_my_videos","read_report","search_feedback").contains(tool);
         if(spec!=null && spec.type().equals("video.metric"))
@@ -52,6 +54,10 @@ public final class AnalysisExecutionPolicy {
                 ? Math.max(configured, Math.min(32, modelCalls - 1)) : configured;
     }
     public static void requireComplete(Specification spec, List<Evidence> evidence) {
+        if(spec.typed() instanceof TaskConditions.Transcript frozen) {
+            if(evidence.size()!=1 || evidence.get(0).transcript()==null || !evidence.get(0).transcript().context().equals(frozen.context()))
+                throw new AgentException("INVALID_EVIDENCE","Transcript answer requires one matching audio result");
+        }
         if (spec.analysis() == null) { EvidencePresentation.requireKind(spec, evidence); return; }
         var required = spec.analysis();
         var covered = EnumSet.noneOf(AnalysisContract.Source.class);
@@ -61,7 +67,7 @@ public final class AnalysisExecutionPolicy {
                 item.feedback().request().sources().forEach(s->covered.add(AnalysisContract.Source.valueOf(s.name())));
                 if(item.feedback().request().grounding()==FeedbackAnalysis.Grounding.VIDEO_GROUNDED)covered.add(VIDEO);
             }
-            if (item.videoContent() != null) covered.add(VIDEO);
+            if (item.videoContent() != null || item.transcript()!=null) covered.add(VIDEO);
             if (item.comments() != null) covered.add(COMMENT);
             if (item.data() != null) covered.add(DANMAKU);
             if (item.analysis() != null) {

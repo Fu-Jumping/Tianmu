@@ -21,6 +21,7 @@ public sealed interface TaskConditions {
                 throw new AgentException("TASK_CONSTRAINT_VIOLATION", "Video query differs from prepared task bounds");
         }
     }
+    record Transcript(TranscriptContent.Context context) implements TaskConditions {}
     record Other(String type) implements TaskConditions {}
     record Interaction(Video video, String kind, DanmakuTypes.Query feedback) implements TaskConditions {
         public Interaction(Video video,String kind){this(video,kind,null);}
@@ -48,6 +49,11 @@ public sealed interface TaskConditions {
                 keys(values, Set.of("video_id", "start", "end"));
                 yield new Report(new DanmakuTypes.Query(integer(values, "video_id"),
                         LocalDateTime.parse((String) values.get("start")), LocalDateTime.parse((String) values.get("end"))));
+            }
+            case "video.transcript" -> {
+                keys(values,Set.of("tenant_id","video_id","source_version","domain","epoch","duration_ms","stage_version","mode","start_ms","end_ms"));
+                yield new Transcript(new TranscriptContent.Context((String)values.get("tenant_id"),integer(values,"video_id"),(String)values.get("source_version"),
+                    (String)values.get("domain"),integer(values,"epoch"),integer(values,"duration_ms"),(String)values.get("stage_version"),(String)values.get("mode"),integer(values,"start_ms"),integer(values,"end_ms")));
             }
             case "video.content" -> {
                 boolean bounded = values.containsKey("start_ms") || values.containsKey("end_ms");

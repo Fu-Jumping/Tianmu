@@ -52,6 +52,28 @@ class MysqlContentWorkIntegrationTest {
         db.update("DELETE FROM agent_content_subscription"); db.update("DELETE FROM agent_content_work");
         store = new MysqlContentWorkStore(source, new ObjectMapper());
     }
+    @Test void typedTranscriptEvidenceSurvivesDurableRunRepositoryReload() {
+        var json=new ObjectMapper().findAndRegisterModules();
+        var viewer=new com.tianmu.agent.core.AgentTypes.AccessScope("transcript-it",UUID.randomUUID().toString(),Set.of(),"",Set.of(asset.videoId()));
+        var context=new com.tianmu.agent.core.TranscriptContent.Context(viewer.tenantId(),asset.videoId(),"media-v1","public",1,120000,"asr-v1","CURRENT",0,60000);
+        var facts=new com.tianmu.agent.core.TranscriptContent.Facts(context,"NO_TEXT",new com.tianmu.agent.core.TranscriptContent.Range(0,60000),List.of(),List.of(),List.of(),List.of("NO_TRANSCRIPT"),Instant.now());
+        var objects=new com.tianmu.agent.adapters.storage.FileObjectStore(directory.resolve("run-evidence"));
+        try(var cache=new com.tianmu.agent.adapters.storage.RedisMemoryCache(json,false,"127.0.0.1",0,"")) {
+            UUID runId,sessionId;
+            try(var repository=new com.tianmu.agent.adapters.storage.MysqlRunRepository(source,json,cache,objects,Duration.ofSeconds(30),16)) {
+                var run=repository.create("typed audio evidence",viewer,null,UUID.randomUUID().toString(),null).run();runId=run.id;sessionId=run.sessionId;
+                assertTrue(run.start());
+                run.execution().evidence().put(new com.tianmu.agent.core.AgentTypes.Evidence("ev_transcript_it",run.id,viewer,null,null,null,null,null,null,null,facts));
+                assertEquals(facts,run.execution().evidence().get("ev_transcript_it").transcript());
+            }
+            try(var restored=new com.tianmu.agent.adapters.storage.MysqlRunRepository(source,json,cache,objects,Duration.ofSeconds(30),16)) {
+                try {
+                    var result=restored.load(runId,viewer).execution().evidence().get("ev_transcript_it");
+                    assertEquals(facts,result.transcript());assertNull(result.videoContent());assertNull(result.data());
+                }finally{restored.deleteSession(sessionId,viewer);}
+            }
+        }
+    }
     @Test void sharedAdmissionAndPerUserCancellationSurviveRepositoryRestart() {
         Job first = enqueue("one", 3), duplicate = enqueue("one", 3);
         assertEquals(first.id(), duplicate.id());

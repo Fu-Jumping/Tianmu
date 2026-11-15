@@ -11,12 +11,15 @@ import org.springframework.stereotype.Component;
 public final class ContextLifecycle {
     private final ConversationStore conversations;
     private final RuntimeHarness harness;
+    @org.springframework.beans.factory.annotation.Autowired(required=false) private TranscriptChatService transcriptChat;
+    private boolean boundedContent(RunState run){return transcriptChat!=null && transcriptChat.protects(run);}
     @org.springframework.beans.factory.annotation.Autowired(required=false) private com.tianmu.agent.memory.MemoryRecallService recall;
     @org.springframework.beans.factory.annotation.Autowired(required=false) private com.tianmu.agent.memory.CompactionService compaction;
     @org.springframework.beans.factory.annotation.Autowired(required=false) private com.tianmu.agent.memory.MemoryLedger ledger;
     @org.springframework.beans.factory.annotation.Autowired(required=false) private com.tianmu.agent.memory.MemoryHostService hostMemory;
     @org.springframework.beans.factory.annotation.Autowired(required=false) private com.tianmu.agent.memory.MemoryConsolidation learning;
     public java.util.Optional<com.tianmu.agent.core.AgentTypes.Answer> memoryRequest(RunState run){
+        if(transcriptChat!=null && transcriptChat.needsNewAnchor(run))return java.util.Optional.of(new com.tianmu.agent.core.AgentTypes.Answer("这次片段解释暂不复用上一轮内容。请在视频页停到要讨论的位置，再说“解释当前片段”，或明确指定播放区间和问题。",java.util.List.of()));
         if(hostMemory!=null){var overview=hostMemory.answer(run);if(overview.isPresent())return overview;}
         if(learning==null || !com.tianmu.agent.memory.MemoryIntent.save(run.message,run.memory().recent()))return java.util.Optional.empty();
         var receipt=harness.stage(run,"agent.memory.request",null,null,Map.of("memory.trigger_reason","EXPLICIT_REQUEST"),()->learning.requestSave(run));
@@ -33,13 +36,14 @@ public final class ContextLifecycle {
     }
     public void load(RunState run) {
         if(conversations!=null)run.memory(harness.stage(run,"agent.memory.load",null,null,Map.of(),()->conversations.memory(run)));
+        if(boundedContent(run)){transcriptChat.project(run);return;}
         var plan=com.tianmu.agent.memory.MemoryRecallPlan.of(run.message);
         boolean overview=hostMemory!=null && hostMemory.handles(run);
         if(ledger!=null && !overview)run.memory(run.memory().withRecent(ledger.inherit(run,run.memory().recent())));
         else if(recall!=null && !overview)recall.inherit(run);
         if(compaction!=null)compaction.apply(run);
     }
-    public void recall(RunState run) { if(recall!=null)recall.recall(run); }
+    public void recall(RunState run) { if(boundedContent(run)){transcriptChat.project(run);return;} if(recall!=null)recall.recall(run); }
     public void bindFocus(RunState run,com.tianmu.agent.core.TaskTypes.Specification specification) {
         var focus=run.memory().focus();
         if(focus==null)return;
@@ -48,6 +52,7 @@ public final class ContextLifecycle {
         if(conversations!=null)conversations.focus(run,updated);
     }
     public void resume(RunState run,boolean direct) {
+        if(boundedContent(run)){transcriptChat.project(run);transcriptChat.verify(run);return;}
         if(recall!=null){recall.begin(run);if(direct)recall.verify(run);else recall.restore(run);}
         if(compaction!=null){compaction.begin(run);if(!direct)compaction.apply(run);}
     }

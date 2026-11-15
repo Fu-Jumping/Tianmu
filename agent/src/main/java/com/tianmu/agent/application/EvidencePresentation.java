@@ -11,6 +11,7 @@ public final class EvidencePresentation {
         boolean supported = switch (specification.type()) {
             case "creator.draft" -> evidence.stream().anyMatch(e -> e.videoContent() != null);
             case "video.metric" -> evidence.stream().anyMatch(e -> e.data() != null);
+            case "video.transcript" -> evidence.stream().anyMatch(e->e.transcript()!=null);
             case "video.content" -> evidence.stream().anyMatch(e -> e.videoContent() != null);
             case "comments.analysis" -> evidence.stream().anyMatch(e -> e.comments() != null || e.feedback()!=null);
             case "danmaku.report", "danmaku.overview" -> evidence.stream().anyMatch(e -> e.analysis() != null && e.analysis().sources()==null || e.feedback()!=null);
@@ -33,6 +34,13 @@ public final class EvidencePresentation {
             if (data != null && "mysql:bullet:retained-persisted-v1".equals(data.source()))
                 notes.add(new AnswerNote("视频" + data.videoId() + " · " + data.date(),
                         "按创建日期统计当前保留的已入库弹幕；不含已删除记录，也不代表全部已发送弹幕。", data.dataAsOf(), data.timezone()));
+            if(value.transcript()!=null) {
+                var t=value.transcript();
+                String bounds="读取范围 "+(t.requested().startMs()/1000.0)+"–"+(t.requested().endMs()/1000.0)+" 秒。";
+                notes.add(new AnswerNote("音频转写",bounds+"仅依据可用音频转写，未核实板书、公式或图示；转写可能有误。"
+                    +(t.missingRanges().isEmpty()?"":"部分范围缺少可用证据。")+(t.fragments().stream().anyMatch(f->f.precision().equals("CLIP"))?"时间定位为整段精度，不能视为逐句定位。":"")
+                    +"处理范围不代表知识点完整覆盖。",t.readAt(),"Asia/Shanghai"));
+            }
             var video = value.videoContent();
             if (video != null) {
                 String audio = video.transcript().isBlank() ? "本次仅依据画面，未分析音频，不能据此判断对白或音效。"

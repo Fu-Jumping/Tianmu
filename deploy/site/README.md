@@ -170,3 +170,11 @@ Loop 默认 `HARNESS_MODEL=deepseek-flash`（官方当前对应 V4.1 Flash）；
 Agent需完成V30迁移，再显式启用`agent.video.transcript-query.enabled`并指定`agent.video.transcript-query.stage-version`及`agent.video.transcript-query.result-directory`。目录必须与worker结果目录共享同一个受控持久卷，不能发布为静态下载目录；当前不是对象存储多节点方案。固定stageVersion须对应已通过验收的生产器，不自动选择或启用ASR。读取配置均启动生效，完整范围见技术设计第十八节和Agent配置目录。
 
 新增接口只提供受控转写查询与引用复核，尚未接入现有聊天工具、完成策略、前台引用按钮或自动补产。不要仅打开这些开关就宣布视频个人助理上线；真实模型质量、任务调度、预算及Trace关联仍需后续验收。
+
+### 字幕问答桥接（受控测试，默认关闭）
+
+后续本地实现新增`agent.video.transcript-chat.enabled`，默认false、重启生效；依赖已启用的transcript-query服务。它将非报告片段任务绑定为`video.transcript`，串联只读工具、独立audio-transcript-v1证据、完成策略和交付复核。字幕任务读取期间必须保留服务与固定策略；停用／改策略后的已绑定任务会明确失败，不降级为旧链路。普通任务不受字幕revision变化影响。
+
+目前只能在受控环境启用：客户端播放器媒体版本尚未绑定、正常多轮依赖尚未实现，生产ASR和数学课效果亦未验收；没有部署到线上。自然续问暂要求重新指定位置，视频页实验上下文会隔离无依赖证明的旧历史及记忆。正文会在最终校验通过后再展示，不提前输出模型文字。
+
+开启新证据writer前，所有reader必须先支持audio-transcript-v1；关闭开关不等于能回滚至不认识该持久格式的旧二进制。新增逻辑及明确未完成范围见技术设计第十九节，不能沿用上一节只读接口的验收结论作为上线依据。
