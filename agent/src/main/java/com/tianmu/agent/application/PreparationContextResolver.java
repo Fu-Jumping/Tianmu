@@ -15,7 +15,7 @@ import org.springframework.stereotype.Component;
 @Component
 public final class PreparationContextResolver {
     public record Request(UUID runId,String originalQuery,String query,LocalDate businessDate,AccessScope owner,MemoryTypes.View memory,RequestContext page) {}
-    public record Resolved(MemoryTypes.View memory,String analysisQuery,Specification lookup) {}
+    public record Resolved(MemoryTypes.View memory,String analysisQuery,Specification lookup,Long videoDurationMs) {}
     public interface Stages { <T>T call(String name,Supplier<T> action); }
     private final VideoPagePort pages;
     private final VideoSearchPort searches;
@@ -25,12 +25,13 @@ public final class PreparationContextResolver {
         this(pages.getIfAvailable(),searches.getIfAvailable());
     }
     public Resolved resolve(Request input,Supplier<CallControl> controls,Stages stages) {
-        controls.get().checkpoint();var page=input.page();
+        controls.get().checkpoint();var page=input.page();Long videoDurationMs=null;
         if(page!=null) {
             if(!input.owner().readableVideoIds().contains(Long.parseLong(page.videoId())))throw new AgentException("FORBIDDEN","Current page outside scope");
             if(pages!=null) {
                 var metadata=pages.page(Long.parseLong(page.videoId()),input.owner());controls.get().checkpoint();
                 if(metadata==null || !page.videoId().equals(metadata.videoId()))throw new AgentException("BUSINESS_UNAVAILABLE","Invalid page metadata");
+                videoDurationMs=metadata.durationMs();
                 page=new RequestContext(page.videoId(),metadata.title(),page.playbackMs()!=null && page.playbackMs()<metadata.durationMs()?page.playbackMs():null);
             } else page=new RequestContext(page.videoId(),"",page.playbackMs());
         }
@@ -56,6 +57,6 @@ public final class PreparationContextResolver {
         boolean lookup=discovery.isPresent() && page==null || VideoDiscovery.historicalReport(input.query()) && !DanmakuTarget.matcher(input.query()).find();
         var specification=lookup?new Specification("resource.lookup",Map.of("selection_required",discovery.isPresent() && page==null && VideoDiscovery.requiresSelection(input.query()),
                 "report_reference_required",VideoDiscovery.historicalReport(input.query())),Map.of()):null;
-        return new Resolved(projected,query,specification);
+        return new Resolved(projected,query,specification,videoDurationMs);
     }
 }

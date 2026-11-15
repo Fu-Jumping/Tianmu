@@ -101,7 +101,7 @@ public class PreparationService implements AutoCloseable {
         }
         com.tianmu.agent.core.TaskTypes.Specification resolved;
         Clarification meaningClarification = null;
-        try { resolved = meaning.resolve(run.query(), run.businessDate, run.createdAt,run.memory()); }
+        try { resolved = meaning.resolve(run.query(), run.businessDate, run.createdAt,run.memory(),contextResolution.videoDurationMs()); }
         catch (AgentException error) {
             if (!"AMBIGUOUS_ANALYSIS_SOURCES".equals(error.code())) throw error;
             if(runPolicy.deterministicRouting()) {
@@ -114,7 +114,7 @@ public class PreparationService implements AutoCloseable {
             resolved = new com.tianmu.agent.core.TaskTypes.Specification("unclassified",Map.of(),Map.of());
         }
         final var specification = resourceLookup ? contextResolution.lookup() : resolved;
-        if (!resourceLookup && meaningClarification == null && !specification.equals(meaning.resolve(query, run.businessDate, run.createdAt,run.memory())))
+        if (!resourceLookup && meaningClarification == null && !specification.equals(meaning.resolve(query, run.businessDate, run.createdAt,run.memory(),contextResolution.videoDurationMs())))
             throw new AgentException("TASK_CONSTRAINT_VIOLATION", "Input transformation changed the task conditions");
         String validationQuery=analysisQuery;
         var currentFocus=run.memory().focus();
@@ -226,7 +226,7 @@ public class PreparationService implements AutoCloseable {
                 boolean accepted=false;
                 if(safeRewrite(query,candidate) && !resourceLookup && !effective.type().equals("unclassified"))try{
                     var rewrittenInput=new Input(candidate,run.businessDate,run.owner,run.memory(),run.createdAt,contextInput.intentCandidates());
-                    var proposed=meaning.resolve(candidate,run.businessDate,run.createdAt,run.memory());
+                    var proposed=meaning.resolve(candidate,run.businessDate,run.createdAt,run.memory(),contextResolution.videoDurationMs());
                     if(proposed.type().equals("unclassified"))proposed=meaning.reportCandidate(rewrittenInput,recognition).orElse(proposed);
                     accepted=sameTask(effective,proposed);
                 }catch(AgentException|IllegalArgumentException rejected){ /* Untrusted rewrite never aborts the original request. */ }
