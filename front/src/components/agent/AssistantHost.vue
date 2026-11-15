@@ -1,5 +1,5 @@
 <template>
-  <button v-if="allowedPage && !visible && !fullPage" title="打开个人助手" class="assistant-launcher" :class="{ 'assistant-launcher--home': isHome, 'assistant-launcher--expanded': isHome && !pageScrolled }" @click="assistant.show()" aria-label="打开个人助手"><EchoMark /><span v-if="isHome" class="assistant-launcher__label">个人助手</span></button>
+  <button v-if="isHome && !visible" title="打开个人助手" class="assistant-launcher" :class="{ 'assistant-launcher--home': isHome, 'assistant-launcher--expanded': isHome && !pageScrolled }" @click="assistant.show()" aria-label="打开个人助手"><EchoMark /><span v-if="isHome" class="assistant-launcher__label">个人助手</span></button>
   <Transition name="assistant-panel" :css="allowedPage"><section ref="panel" v-show="visible" class="assistant-host" :style="fullPage ? undefined : drawerStyle" :class="{ 'assistant-full': fullPage, 'assistant-drawer': !fullPage }" aria-label="个人助手" @keydown.esc="dismiss">
     <template v-if="!users.isLogin"><div class="assistant-login"><h2>你的个人助手</h2><p>{{ users.sessionExpired ? '登录状态已失效，请重新登录后继续。' : '登录后开始对话，历史记录仅对你可见。' }}</p><button @click="users.updateDialogVisible(true)">登录</button><button @click="assistant.open = false">收起</button></div></template>
     <template v-else>

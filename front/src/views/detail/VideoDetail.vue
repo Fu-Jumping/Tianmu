@@ -468,7 +468,6 @@ export default {
     mediaVideoUrl,
     mediaUrl,
     openAssistant() {
-      if (!this.isVideoAuthor) return;
       useAssistantStore().show();
       if (this.$route.query.assistant !== '1') {
         this.$router.replace({ query: { ...this.$route.query, assistant: '1' } });
