@@ -153,3 +153,12 @@ Loop 默认 `HARNESS_MODEL=deepseek-flash`（官方当前对应 V4.1 Flash）；
 主循环预算仍独立执行，Trace 中 `budget.scope=FOREGROUND`；后台预算在任务账本及工作结果中保留。
 重启后新建的 Trace 会话使用 `usage.scope=RUN_PROCESS_SEGMENT` 标识本进程上报的用量，不能冒充整个 Run 的历史总用量。
 后台工作用 `analysis.job_id / work_id / phase / work_kind / batch_ordinal` 关联，模型调用为 `feedback.model` 子 Span。
+
+
+## 视频内容处理授权
+
+目标实现默认关闭，尚未部署。启用前执行一次`migrations/20261115_content_processing_authority.sql`，核对三个epoch触发器及最终安装标记，保留删除视频的epoch墓碑。业务服务同时需要`agent.bridge.enabled=true`、`agent.content-processing.enabled=true`和挂载的`agent.content-processing.token-file`；密钥须为密码学安全随机生成的32至256字节可打印ASCII内容，不能用示例文本或用户token。
+
+接口仅用于受保护的内部服务网络，不加入公网代理。grant默认900秒、范围30至3600秒；权威查询默认5秒、范围1至10秒；均启动读取。轮换密钥时先暂停并排空worker，再协调两端重启，避免无效请求消耗任务重试预算。生产worker、模型质量门槛和媒体读取仍需独立验收，不能仅打开业务开关即宣布上线。
+
+详见`agent/docs/视频个人助理生产化技术设计.md`第十七节。当前没有为平台worker提供自动启用配置。

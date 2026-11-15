@@ -1,0 +1,55 @@
+{
+  "date": "2026-11-15",
+  "baseCommit": "05008eb",
+  "deployed": false,
+  "automaticWorkerEnabled": false,
+  "businessTests": {
+    "count": 17,
+    "failures": 0,
+    "errors": 0,
+    "skipped": 0,
+    "mysqlIntegrationTests": 9,
+    "command": "mvn -Dtest=BusinessContentAuthorityIntegrationTest,ContentProcessingControllerTest,ContentProcessingConfigurationTest,BusinessVideoContentTest test"
+  },
+  "agentTests": {
+    "failures": 0,
+    "errors": 0,
+    "skipped": 0,
+    "mysqlIntegrationTests": 15,
+    "command": "mvn -f agent/pom.xml -Dspring.profiles.active=demo -Dtest=HttpContentProcessingAuthorityTest,MysqlContentWorkIntegrationTest,ContentBoundaryTest,TimedTranscriptTest,TimedTranscriptionClientTest,GovernanceArchitectureTest test",
+    "baseSuiteCount": 35,
+    "supplementalMysqlRecheckCount": 15,
+    "distinctTestCount": 36
+  },
+  "realInfrastructure": [
+    "dedicated MySQL 8.4 database video_content_jobs_it",
+    "native loopback HTTP client/server",
+    "filesystem transcript artifacts with SHA256 verification"
+  ],
+  "scriptedDependencies": [
+    "MinIO/media source in authority tests",
+    "media extraction during worker tests",
+    "transcription model in worker tests"
+  ],
+  "verified": [
+    "public-only durable grants",
+    "monotonic revocation epoch across unpublish/republish and delete/id reuse",
+    "partial schema installation blocks grants",
+    "service token required and redirects not followed",
+    "shared string-ID wire contract",
+    "worker stage and version claim filter",
+    "fenced heartbeat and publication",
+    "private prepared-result recovery without repeating extraction or ASR",
+    "model call slot held until actual return after cancellation",
+    "long-running model crosses its initial lease expiry while heartbeat renews the same generation"
+  ],
+  "notVerified": [
+    "full Java application test suite",
+    "deployed HTTP bridge and real MinIO extraction end-to-end",
+    "accepted production ASR model",
+    "automatic scheduling and user-facing readiness",
+    "Run/Trace linkage for background processing",
+    "multi-host object storage and power-loss durability"
+  ],
+  "distinctRelatedTestsAcrossModules": 53
+}

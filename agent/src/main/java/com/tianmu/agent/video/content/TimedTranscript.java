@@ -24,7 +24,10 @@ public record TimedTranscript(long clipStartMs, long clipEndMs, String rawText,
                 || state == State.NO_TRANSCRIPT && !rawText.isBlank())
             throw new IllegalArgumentException("Invalid transcript state");
         long previousStart = clipStartMs;
+        int textCharacters = 0;
         for (Segment segment : segments) {
+            textCharacters += segment.text().length();
+            if (textCharacters > 12000) throw new IllegalArgumentException("Transcript segment text too large");
             if (segment.startMs() < previousStart || segment.endMs() > clipEndMs)
                 throw new IllegalArgumentException("Transcript outside clip or unordered");
             previousStart = segment.startMs();

@@ -24,6 +24,13 @@ public final class BusinessVideoContent {
     public Source source(BusinessAuthentication.Principal principal, long videoId) { return resolve(principal, videoId).source(); }
     private Resolved resolve(BusinessAuthentication.Principal principal, long videoId) {
         var rows = db.queryForList("SELECT file_url,duration FROM video WHERE video_id=? AND (status=2 OR user_id=?) AND is_delete=0", videoId, Long.parseLong(principal.userId()));
+        return resolveRows(videoId, rows);
+    }
+    public Source publicSource(long videoId) { return resolvePublic(videoId).source(); }
+    private Resolved resolvePublic(long videoId) {
+        return resolveRows(videoId, db.queryForList("SELECT file_url,duration FROM video WHERE video_id=? AND status=2 AND is_delete=0", videoId));
+    }
+    private Resolved resolveRows(long videoId, List<Map<String,Object>> rows) {
         if (rows.size() != 1) throw new BridgeException("FORBIDDEN", 403);
         if (minio == null) throw new BridgeException("VIDEO_STORAGE_UNAVAILABLE", 503);
         try {
@@ -43,7 +50,13 @@ public final class BusinessVideoContent {
         catch (Exception e) { throw new BridgeException("VIDEO_SOURCE_UNAVAILABLE", 503); }
     }
     public Media sample(BusinessAuthentication.Principal principal, long videoId, String version, long start, long end) {
-        Resolved resolved = resolve(principal, videoId);
+        return sample(() -> resolve(principal, videoId), videoId, version, start, end);
+    }
+    public Media publicSample(long videoId, String version, long start, long end) {
+        return sample(() -> resolvePublic(videoId), videoId, version, start, end);
+    }
+    private Media sample(java.util.function.Supplier<Resolved> resolver, long videoId, String version, long start, long end) {
+        Resolved resolved = resolver.get();
         Source source = resolved.source();
         if (!source.sourceVersion().equals(version)) throw new BridgeException("VIDEO_VERSION_CHANGED", 409);
         if (start < 0 || end <= start || end > source.durationMs()
@@ -64,7 +77,7 @@ public final class BusinessVideoContent {
                 }
                 if (total != resolved.bytes()) throw new BridgeException("VIDEO_VERSION_CHANGED", 409);
             }
-            if (!resolve(principal, videoId).source().sourceVersion().equals(version)) throw new BridgeException("VIDEO_VERSION_CHANGED", 409);
+            if (!resolver.get().source().sourceVersion().equals(version)) throw new BridgeException("VIDEO_VERSION_CHANGED", 409);
             List<Frame> frames = new ArrayList<>();
             int count = (int)Math.min(12, Math.max(1, (end - start + 999) / 1000));
             for (int i = 0; i < count; i++) {

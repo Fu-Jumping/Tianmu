@@ -18,7 +18,9 @@ public final class MysqlContentWorkStore {
     private final ObjectMapper json;
     public MysqlContentWorkStore(DataSource source, ObjectMapper json) {
         this.db = new JdbcTemplate(source); this.db.setQueryTimeout(5);
-        this.json = json.copy().findAndRegisterModules();
+        this.json = json.copy().findAndRegisterModules().setPropertyNamingStrategy(com.fasterxml.jackson.databind.PropertyNamingStrategies.LOWER_CAMEL_CASE)
+                .disable(com.fasterxml.jackson.databind.SerializationFeature.WRITE_ENUMS_USING_INDEX)
+                .disable(com.fasterxml.jackson.databind.SerializationFeature.WRITE_ENUMS_USING_TO_STRING);
     }
     public Job enqueue(Unit unit, Grant grant, Instant deadline, int maxAttempts) {
         Objects.requireNonNull(unit); Objects.requireNonNull(grant); Objects.requireNonNull(deadline);
@@ -55,10 +57,15 @@ public final class MysqlContentWorkStore {
                 (String)r.get("error_code"));
     }
     public Optional<Lease> claim(String worker, Duration leaseDuration) {
+        return claim(worker, leaseDuration, null, null);
+    }
+    public Optional<Lease> claim(String worker, Duration leaseDuration, Stage stage, String stageVersion) {
+        if ((stage == null) != (stageVersion == null)) throw new IllegalArgumentException("Incomplete worker capability");
+        if (stageVersion != null) identifier(stageVersion);
         identifier(worker); long seconds = seconds(leaseDuration, 600);
         db.update("UPDATE agent_content_work SET status='EXPIRED',fence=fence+1,updated_at=UTC_TIMESTAMP(6) WHERE status IN ('QUEUED','RETRY_WAIT','RUNNING') AND deadline_at<=UTC_TIMESTAMP(6) LIMIT 128");
         db.update("UPDATE agent_content_work SET status='FAILED',error_code='ATTEMPTS_EXHAUSTED',fence=fence+1,updated_at=UTC_TIMESTAMP(6) WHERE status='RUNNING' AND lease_until<=UTC_TIMESTAMP(6) AND attempts>=max_attempts LIMIT 128");
-        var candidates = db.queryForList("SELECT job_id,fence FROM agent_content_work WHERE deadline_at>UTC_TIMESTAMP(6) AND attempts<max_attempts AND ((status IN ('QUEUED','RETRY_WAIT') AND ready_at<=UTC_TIMESTAMP(6)) OR (status='RUNNING' AND lease_until<=UTC_TIMESTAMP(6))) ORDER BY ready_at,job_id LIMIT 32");
+        var candidates = db.queryForList("SELECT job_id,fence FROM agent_content_work WHERE deadline_at>UTC_TIMESTAMP(6) AND attempts<max_attempts AND ((status IN ('QUEUED','RETRY_WAIT') AND ready_at<=UTC_TIMESTAMP(6)) OR (status='RUNNING' AND lease_until<=UTC_TIMESTAMP(6))) AND (? IS NULL OR (JSON_UNQUOTE(JSON_EXTRACT(document,'$.stage'))=? AND JSON_UNQUOTE(JSON_EXTRACT(document,'$.stageVersion'))=?)) ORDER BY ready_at,job_id LIMIT 32", stage==null?null:stage.name(),stage==null?null:stage.name(),stageVersion);
         for (var row : candidates) {
             UUID id = UUID.fromString(row.get("job_id").toString()); long fence = ((Number)row.get("fence")).longValue();
             int changed = db.update("UPDATE agent_content_work SET status='RUNNING',fence=fence+1,attempts=attempts+1,lease_owner=?,lease_until=LEAST(deadline_at,TIMESTAMPADD(SECOND,?,UTC_TIMESTAMP(6))),updated_at=UTC_TIMESTAMP(6) WHERE job_id=? AND fence=? AND deadline_at>UTC_TIMESTAMP(6) AND attempts<max_attempts AND ((status IN ('QUEUED','RETRY_WAIT') AND ready_at<=UTC_TIMESTAMP(6)) OR (status='RUNNING' AND lease_until<=UTC_TIMESTAMP(6)))",
@@ -79,12 +86,17 @@ public final class MysqlContentWorkStore {
                 seconds, lease.jobId().toString(), lease.fence(), lease.worker()) == 1;
     }
     public boolean complete(Lease lease, Receipt receipt) {
-        int changed = db.update("UPDATE agent_content_work SET status='SUCCEEDED',result_ref=?,result_digest=?,updated_at=UTC_TIMESTAMP(6) WHERE job_id=? AND fence=? AND lease_owner=? AND status='RUNNING' AND lease_until>UTC_TIMESTAMP(6) AND deadline_at>UTC_TIMESTAMP(6)",
-                receipt.reference(), receipt.digest(), lease.jobId().toString(), lease.fence(), lease.worker());
+        int changed = db.update("UPDATE agent_content_work SET status='SUCCEEDED',result_ref=?,result_digest=?,updated_at=UTC_TIMESTAMP(6) WHERE job_id=? AND fence=? AND lease_owner=? AND status='RUNNING' AND lease_until>UTC_TIMESTAMP(6) AND deadline_at>UTC_TIMESTAMP(6) AND (result_ref IS NULL OR (result_ref=? AND result_digest=?))",
+                receipt.reference(), receipt.digest(), lease.jobId().toString(), lease.fence(), lease.worker(),receipt.reference(),receipt.digest());
         if (changed == 1) return true;
         Job job = get(lease.jobId());
         return job.status() == Status.SUCCEEDED && job.fence() == lease.fence()
                 && Objects.equals(job.leaseOwner(), lease.worker()) && receipt.equals(job.result());
+    }
+    /** Durable private checkpoint, not a successful publication. Recovered leases may reuse it after authorization. */
+    public boolean stageResult(Lease lease, Receipt receipt) {
+        return db.update("UPDATE agent_content_work SET result_ref=?,result_digest=?,updated_at=UTC_TIMESTAMP(6) WHERE job_id=? AND fence=? AND lease_owner=? AND status='RUNNING' AND lease_until>UTC_TIMESTAMP(6) AND deadline_at>UTC_TIMESTAMP(6) AND (result_ref IS NULL OR (result_ref=? AND result_digest=?))",
+                receipt.reference(),receipt.digest(),lease.jobId().toString(),lease.fence(),lease.worker(),receipt.reference(),receipt.digest())==1;
     }
     public boolean fail(Lease lease, String errorCode, boolean retryable, Duration backoff) {
         if (errorCode == null || !errorCode.matches("[A-Z0-9_]{1,64}")) throw new IllegalArgumentException("Invalid error code");

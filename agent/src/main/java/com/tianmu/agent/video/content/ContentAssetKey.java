@@ -1,7 +1,8 @@
 package com.tianmu.agent.video.content;
 
 /** Trusted media identity supplied by the business authority, never a client authorization grant. */
-public record ContentAssetKey(String tenantId, long videoId, String sourceVersion,
+public record ContentAssetKey(String tenantId,
+                              @com.fasterxml.jackson.databind.annotation.JsonSerialize(using=com.fasterxml.jackson.databind.ser.std.ToStringSerializer.class) long videoId, String sourceVersion,
                               String authorizationDomain, long revocationEpoch) {
     public ContentAssetKey {
         require(tenantId, 128); require(sourceVersion, 128); require(authorizationDomain, 128);

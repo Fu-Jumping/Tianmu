@@ -24,8 +24,11 @@ public final class ContentWorkService {
         return store.enqueue(unit, grant, deadline, maxAttempts);
     }
     public Optional<Lease> claim(String worker, Duration leaseDuration, CallControl control) {
+        return claim(worker, leaseDuration, null, null, control);
+    }
+    public Optional<Lease> claim(String worker, Duration leaseDuration, Stage stage, String stageVersion, CallControl control) {
         control.checkpoint();
-        Optional<Lease> claimed = store.claim(worker, leaseDuration);
+        Optional<Lease> claimed = store.claim(worker, leaseDuration, stage, stageVersion);
         if (claimed.isEmpty()) return claimed;
         Lease lease = claimed.get();
         try {
@@ -71,6 +74,8 @@ public final class ContentWorkService {
     private void reject(Lease lease, AgentException failure) {
         if (Set.of("FORBIDDEN", "CONTENT_GRANT_EXPIRED", "CONTENT_GRANT_REVOKED", "VIDEO_VERSION_CHANGED").contains(failure.code()))
             store.revoke(lease);
+        else if(Set.of("CONTENT_MEDIA_UNSUPPORTED","INVALID_CONTENT_REQUEST").contains(failure.code()))
+            store.fail(lease,failure.code(),false,retryBackoff);
         else store.fail(lease, "CONTENT_AUTHORITY_UNAVAILABLE", true, retryBackoff);
     }
 }

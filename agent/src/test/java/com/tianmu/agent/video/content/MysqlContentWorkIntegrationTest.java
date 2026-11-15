@@ -7,11 +7,16 @@ import com.zaxxer.hikari.*;
 import org.flywaydb.core.Flyway;
 import org.junit.jupiter.api.*;
 import org.junit.jupiter.api.condition.EnabledIfEnvironmentVariable;
+import org.junit.jupiter.api.io.TempDir;
 import org.springframework.jdbc.core.JdbcTemplate;
 import java.time.*;
 import java.util.*;
 import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.nio.file.*;
+import com.tianmu.agent.core.VideoContent;
+import com.tianmu.agent.video.TranscriptionPort;
 import static com.tianmu.agent.video.content.ContentWork.*;
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -21,6 +26,7 @@ class MysqlContentWorkIntegrationTest {
     private static HikariDataSource source;
     private MysqlContentWorkStore store;
     private JdbcTemplate db;
+    @TempDir Path directory;
     private final ContentAssetKey asset = new ContentAssetKey("site", 800000026087195706L, "media-v1", "public", 1);
     private static final Receipt RESULT = new Receipt("result-1", "a".repeat(64));
     private static CallControl control() { return new CallControl(Instant.now().plusSeconds(30), new CancellationToken()); }
@@ -176,5 +182,85 @@ class MysqlContentWorkIntegrationTest {
                 new Grant(UUID.randomUUID(),changed,Instant.now().plusSeconds(300)),Instant.now().plusSeconds(60),3);
         assertEquals(changed, other.unit().asset());
         assertEquals(2, db.queryForObject("SELECT COUNT(*) FROM agent_content_work", Integer.class));
+    }
+    private ContentProcessingMediaPort media() {
+        return (grant,from,to,control)->new VideoContent.Media(
+                new VideoContent.Source(asset.videoId(),asset.sourceVersion(),60000),from,to,List.of(),"AQID");
+    }
+    private ContentTranscriptionWorker worker(ContentWorkService service,ContentProcessingMediaPort media,TranscriptionPort asr,ContentTranscriptStore results) {
+        return new ContentTranscriptionWorker(store,service,media,asr,results,"transcriber","asr-v1",Duration.ofSeconds(30),Duration.ofSeconds(5));
+    }
+    @Test void workerProcessesOnlyItsRegisteredStageAndVersionAndPersistsPrivateResult()throws Exception {
+        var grant=grant();
+        store.enqueue(new Unit(asset,Stage.VISION,"frame","vision-v1",0,30000),grant,Instant.now().plusSeconds(60),3);
+        store.enqueue(new Unit(asset,Stage.TRANSCRIBE,"other-model","asr-v2",0,30000),grant,Instant.now().plusSeconds(60),3);
+        Job job=enqueue("worker",3);
+        var service=new ContentWorkService(store,(g,point,c)->{},Duration.ofSeconds(1));
+        var files=new FileContentTranscriptStore(directory,new ObjectMapper());
+        AtomicInteger calls=new AtomicInteger();
+        try(var worker=worker(service,media(),(audio,c)->{calls.incrementAndGet();return "定义域的讲解";},files)) {
+            assertEquals(ContentTranscriptionWorker.Outcome.SUCCEEDED,worker.runOnce(control()));
+            assertEquals(ContentTranscriptionWorker.Outcome.NO_WORK,worker.runOnce(control()));
+        }
+        Job done=store.get(job.id());assertEquals(Status.SUCCEEDED,done.status());files.verify(done,done.result());
+        assertEquals(1,calls.get());
+        String saved=Files.readString(directory.resolve(job.id()+"-1.json"));
+        assertFalse(saved.contains(job.grant().id().toString()),"Platform credential references must not enter content artifacts");
+        assertTrue(saved.contains("定义域的讲解"));
+    }
+    @Test void recoveredPreparedResultDoesNotRepeatExtractionOrAsr()throws Exception {
+        Job job=enqueue("checkpoint",3);Lease first=store.claim("crashed",Duration.ofSeconds(30)).orElseThrow();
+        var files=new FileContentTranscriptStore(directory,new ObjectMapper());
+        var transcript=new TimedTranscript(0,30000,"已完成讲解",TimedTranscript.State.AVAILABLE,TimedTranscript.Precision.CLIP,
+                List.of(new TimedTranscript.Segment(0,30000,"已完成讲解")));
+        Receipt receipt=files.save(store.requireLease(first),first,transcript);assertTrue(store.stageResult(first,receipt));
+        db.update("UPDATE agent_content_work SET lease_until=TIMESTAMPADD(SECOND,-1,UTC_TIMESTAMP(6)) WHERE job_id=?",job.id().toString());
+        AtomicInteger calls=new AtomicInteger();var service=new ContentWorkService(store,(g,p,c)->{},Duration.ofSeconds(1));
+        try(var worker=worker(service,(g,f,t,c)->{calls.incrementAndGet();throw new AssertionError("No repeat media extraction");},
+                (audio,c)->{calls.incrementAndGet();throw new AssertionError("No repeat ASR");},files)) {
+            assertEquals(ContentTranscriptionWorker.Outcome.SUCCEEDED,worker.runOnce(control()));
+        }
+        assertEquals(0,calls.get());assertEquals(receipt,store.get(job.id()).result());
+        assertFalse(store.complete(first,receipt));
+    }
+    @Test void revokedGrantAfterAsrNeverPublishesPreparedResult()throws Exception {
+        Job job=enqueue("revoke-model",3);AtomicBoolean allowed=new AtomicBoolean(true);
+        var service=new ContentWorkService(store,(g,p,c)->{if(!allowed.get())throw new AgentException("CONTENT_GRANT_REVOKED","revoked");},Duration.ofSeconds(1));
+        try(var worker=worker(service,media(),(audio,c)->{allowed.set(false);return "模型结果";},new FileContentTranscriptStore(directory,new ObjectMapper()))) {
+            assertEquals(ContentTranscriptionWorker.Outcome.FAILED,worker.runOnce(control()));
+        }
+        assertEquals(Status.REVOKED,store.get(job.id()).status());
+    }
+    @Test void closeDoesNotFinishAnUninterruptibleModelInvocationEarly()throws Exception {
+        enqueue("native-call",3);var service=new ContentWorkService(store,(g,p,c)->{},Duration.ofSeconds(1));
+        CountDownLatch entered=new CountDownLatch(1),release=new CountDownLatch(1);
+        var worker=worker(service,media(),(audio,c)->{entered.countDown();try{release.await();}catch(InterruptedException e){throw new IllegalStateException(e);}return "late";},
+                new FileContentTranscriptStore(directory,new ObjectMapper()));
+        var executor=Executors.newSingleThreadExecutor();
+        try {
+            Future<ContentTranscriptionWorker.Outcome> pending=executor.submit(()->worker.runOnce(control()));
+            assertTrue(entered.await(10,TimeUnit.SECONDS));
+            assertEquals(ContentTranscriptionWorker.Outcome.BUSY,worker.runOnce(control()));
+            worker.close();assertThrows(TimeoutException.class,()->pending.get(150,TimeUnit.MILLISECONDS));
+            release.countDown();assertEquals(ContentTranscriptionWorker.Outcome.FAILED,pending.get(10,TimeUnit.SECONDS));
+            assertEquals(ContentTranscriptionWorker.Outcome.CLOSED,worker.runOnce(control()));
+        }finally{release.countDown();worker.close();executor.shutdownNow();assertTrue(executor.awaitTermination(10,TimeUnit.SECONDS));}
+    }
+    @Test void longRunningTranscriptionRenewsItsLeaseWithoutChangingGeneration()throws Exception {
+        Job job=enqueue("heartbeat",3);AtomicInteger dispatchChecks=new AtomicInteger();
+        var service=new ContentWorkService(store,(g,p,c)->{if(p==Checkpoint.DISPATCH)dispatchChecks.incrementAndGet();},Duration.ofSeconds(1));
+        TranscriptionPort asr=(audio,c)->{
+            Instant originalExpiry=store.get(job.id()).leaseUntil();
+            while(Instant.now().isBefore(originalExpiry.plusMillis(300))) {
+                c.checkpoint();try{Thread.sleep(25);}catch(InterruptedException e){Thread.currentThread().interrupt();throw new IllegalStateException(e);}
+            }
+            return "长调用完成";
+        };
+        try(var worker=new ContentTranscriptionWorker(store,service,media(),asr,new FileContentTranscriptStore(directory,new ObjectMapper()),
+                "heartbeat-worker","asr-v1",Duration.ofSeconds(6),Duration.ofSeconds(1))) {
+            assertEquals(ContentTranscriptionWorker.Outcome.SUCCEEDED,worker.runOnce(control()));
+        }
+        assertTrue(dispatchChecks.get()>=5);assertEquals(1,store.get(job.id()).attempts());
+        assertEquals(1,store.get(job.id()).fence());
     }
 }
