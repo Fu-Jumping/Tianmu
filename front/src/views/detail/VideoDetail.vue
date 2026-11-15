@@ -219,9 +219,9 @@
               </div>
             </div>
           </div>
-            <section v-if="isVideoAuthor" class="operations-entry">
-            <div class="operations-entry-heading"><span class="operations-icon">✦</span><div><strong>EchoFrame运营助手</strong><span>你的内容运营搭档</span></div><small>AI</small></div>
-            <p>聊聊观众反馈，一起找到<br>下一个内容灵感。</p>
+            <section class="operations-entry" aria-label="个人助理">
+            <div class="operations-entry-heading"><span class="operations-icon">✦</span><div><strong>EchoFrame个人助理</strong><span>你的观看与创作搭档</span></div><small>AI</small></div>
+            <p>了解视频内容，探索精彩片段，<br>随时和你的助理聊聊。</p>
             <button class="open-assistant" @click="openAssistant">和助手聊聊 <span>↗</span></button>
           </section>
           <!-- 弹幕组件 -->
