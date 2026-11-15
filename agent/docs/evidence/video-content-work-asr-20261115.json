@@ -1,0 +1,104 @@
+{
+  "date": "2026-11-15",
+  "scope": "Local MySQL scheduling integration and offline ASR baseline; not deployed",
+  "database": {
+    "engine": "MySQL 8.4",
+    "dedicatedDatabase": "video_content_jobs_it",
+    "defaultCollation": "utf8mb4_bin",
+    "migrationRange": "V1 through V29",
+    "finalIntegrationTests": 10,
+    "failures": 0,
+    "errors": 0,
+    "skipped": 0
+  },
+  "model": {
+    "repo": "Systran/faster-whisper-small",
+    "revision": "536b0662742c02347bc0e980a01041f333bce120"
+  },
+  "hardware": {
+    "Name": "Intel(R) Core(TM) Ultra 7 155H",
+    "NumberOfLogicalProcessors": 22
+  },
+  "asrRuns": [
+    {
+      "case": "mapping",
+      "engine": "faster-whisper",
+      "version": "1.2.1",
+      "device": "cpu",
+      "computeType": "int8",
+      "threads": 2,
+      "beamSize": 5,
+      "audioSha256": "9b6e81f3bea507f57b6bf631334f913dee0c0129ff2a0e93daad79d3d3cee1bf",
+      "clipStartMs": 270000,
+      "durationSeconds": 60.0,
+      "modelLoadSeconds": 3.924,
+      "transcriptionSeconds": 35.066,
+      "state": "AVAILABLE",
+      "glossaryAssisted": null,
+      "timingErrorSegments": null,
+      "accuracyReviewed": false,
+      "segmentCount": 16
+    },
+    {
+      "case": "mapping-glossary",
+      "engine": "faster-whisper",
+      "version": "1.2.1",
+      "device": "cpu",
+      "computeType": "int8",
+      "threads": 2,
+      "beamSize": 5,
+      "audioSha256": "9b6e81f3bea507f57b6bf631334f913dee0c0129ff2a0e93daad79d3d3cee1bf",
+      "clipStartMs": 270000,
+      "durationSeconds": 60.0,
+      "modelLoadSeconds": 3.853,
+      "transcriptionSeconds": 44.566,
+      "state": "AVAILABLE",
+      "glossaryAssisted": true,
+      "timingErrorSegments": null,
+      "accuracyReviewed": false,
+      "segmentCount": 10
+    },
+    {
+      "case": "floor",
+      "engine": "faster-whisper",
+      "version": "1.2.1",
+      "device": "cpu",
+      "computeType": "int8",
+      "threads": 2,
+      "beamSize": 5,
+      "audioSha256": "d98d3b3d2ce1a4d08894f90126c92045c1fb950439698e54f3d273aa850f5604",
+      "clipStartMs": 570000,
+      "durationSeconds": 60.0,
+      "modelLoadSeconds": 4.762,
+      "transcriptionSeconds": 38.526,
+      "state": "INVALID_TIMING",
+      "glossaryAssisted": false,
+      "timingErrorSegments": [
+        12
+      ],
+      "accuracyReviewed": false,
+      "segmentCount": 13,
+      "invalidTiming": [
+        {
+          "start": 57.04,
+          "end": 60.04,
+          "playbackStartMs": 627040,
+          "playbackEndMs": 630040
+        }
+      ]
+    }
+  ],
+  "productionAdmission": "NOT_PASSED",
+  "observations": [
+    "Baseline confuses technical terms such as 定义域 and 值域.",
+    "A generic glossary improves these terms but does not eliminate recognition errors.",
+    "One 60-second clip returned a final end timestamp of 60.04 seconds; the timing guard rejects it without clamping.",
+    "No human verbatim reference or accuracy score exists yet.",
+    "Audio inference ran locally with offline model loading; no external ASR service was called."
+  ],
+  "limitations": [
+    "Media authority signing and revocation epoch integration are not implemented.",
+    "No production scheduler or frontend route was enabled.",
+    "No full application or online acceptance test was run."
+  ]
+}

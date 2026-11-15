@@ -49,4 +49,9 @@ class TimedTranscriptTest {
         assertEquals(15000, result.segments().get(0).endMs());
         assertEquals("原始识别内容", result.rawText());
     }
+    @Test void realBaselineFortyMillisecondTailOverrunIsNotSilentlyClamped() throws Exception {
+        var response = json.readTree("{\"text\":\"片尾讲解\",\"segments\":[{\"start\":57.04,\"end\":60.04,\"text\":\"片尾讲解\"}]}");
+        assertThrows(IllegalArgumentException.class,
+                () -> TimedTranscript.fromRelativeSeconds(response, 570000, 630000));
+    }
 }
