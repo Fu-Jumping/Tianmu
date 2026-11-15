@@ -35,7 +35,7 @@ public final class EvidencePresentation {
                         "按创建日期统计当前保留的已入库弹幕；不含已删除记录，也不代表全部已发送弹幕。", data.dataAsOf(), data.timezone()));
             var video = value.videoContent();
             if (video != null) {
-                String audio = video.transcript().isBlank() ? "未提供可用音频转写，不能据此判断对白或音效。"
+                String audio = video.transcript().isBlank() ? "本次仅依据画面，未分析音频，不能据此判断对白或音效。"
                         : "音频转写仅覆盖该区间，未提供逐句时间定位。";
                 notes.add(new AnswerNote("画面分析",
                         "分析范围为 " + (video.startMs() / 1000.0) + "–" + (video.endMs() / 1000.0) + " 秒，仅采样" + video.sampledAtMs().size() + "帧，可能遗漏画面变化，不能代表逐帧或连续动作分析。" + audio

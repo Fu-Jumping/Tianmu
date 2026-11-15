@@ -49,7 +49,7 @@ class AnswerDataNotesTest {
             assertEquals("画面分析", notes.get(0).label());
             assertTrue(notes.get(0).text().contains("2.0–6.0 秒"));
             assertTrue(notes.get(0).text().contains("仅采样2帧"));
-            assertTrue(notes.get(0).text().contains("未提供可用音频转写"));
+            assertTrue(notes.get(0).text().contains("本次仅依据画面，未分析音频"));
             assertEquals(asOf, notes.get(0).updatedAt());
         }
     }

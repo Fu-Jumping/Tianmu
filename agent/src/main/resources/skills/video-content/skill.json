@@ -1,6 +1,6 @@
 {
   "name": "video-content",
-  "version": "2.1.2",
+  "version": "2.1.3",
   "description": "理解指定视频的画面、镜头、播放片段和关键时间点，或生成纯视频内容报告。",
   "tools": [
     "read_result",

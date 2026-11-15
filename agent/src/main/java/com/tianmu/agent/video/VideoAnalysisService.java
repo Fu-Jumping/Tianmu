@@ -58,10 +58,10 @@ public final class VideoAnalysisService {
         long from = start == null ? 0 : start, to = end == null ? source.durationMs() : end;
         if (from < 0 || to <= from || to > source.durationMs() || start != null && to-from > 120_000)
             throw new AgentException("INVALID_ARGUMENTS", "Explicit intervals must be inside the video and at most 120 seconds");
-        TraceAttributes.apply(Span.current(),Map.of("video.id",videoId,"video.source_version",source.sourceVersion(),"video.start_ms",from,"video.end_ms",to,"video.fact_strategy","generic_v4"));
+        TraceAttributes.apply(Span.current(),Map.of("video.id",videoId,"video.source_version",source.sourceVersion(),"video.start_ms",from,"video.end_ms",to,"video.fact_strategy","generic_v5"));
         String key = hash(String.join("|", List.of(scope.tenantId(), scope.userId(), Long.toString(videoId), source.sourceVersion(),
                 Long.toString(from), Long.toString(to), config.baseUrl().toString(), config.provider(), config.model(),
-                config.transcriptionModel(), "video-facts-v4:sampled12:generic-v1",FACT_FOCUS).stream().map(VideoAnalysisService::hash).toList()));
+                config.transcriptionModel(), "video-facts-v5:sampled12:generic-v1",FACT_FOCUS).stream().map(VideoAnalysisService::hash).toList()));
         VideoContent.Facts prior = cached(key,source,from,to);
         TraceAttributes.apply(Span.current(),Map.of("video.cache_hit",prior != null));
         if (prior != null) { VideoAnalysisFlights.checkpoint(control);TraceAttributes.apply(Span.current(),Map.of("video.cache_age_ms",Math.max(0,Duration.between(prior.analyzedAt(),Instant.now()).toMillis())));recordCoverage(prior);return prior; }
