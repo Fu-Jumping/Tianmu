@@ -62,6 +62,10 @@ public final class TranscriptChatService implements com.tianmu.agent.runtime.spi
         if(!current && video.startMs()==null)return spec;
         return traced("video.transcript.bind",()->{
             var identity=reader.identity(video.videoId(),run.owner,control(run));var asset=identity.asset();
+            var player=run.memory().environment();
+            if(player==null || !player.videoId().equals(Long.toString(video.videoId())) || player.sourceVersion()==null
+                    || !player.sourceVersion().equals(asset.sourceVersion()))
+                throw new AgentException("VIDEO_VERSION_CHANGED","Player media version is unavailable or changed; refresh the video");
             long from=video.startMs(),to=video.endMs();
             if(current) {
                 var page=run.memory().environment();

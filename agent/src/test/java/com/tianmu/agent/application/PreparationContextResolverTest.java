@@ -32,4 +32,12 @@ class PreparationContextResolverTest {
         var result=resolver.resolve(request,()->new CallControl(Instant.now().plusSeconds(8),new CancellationToken()),stages);
         assertEquals("可信标题",result.memory().environment().videoTitle());assertNull(result.memory().environment().playbackMs());assertNull(result.lookup());
     }
+    @Test void sourceVersionSurvivesTrustedMetadataResolution() {
+        var resolver=new PreparationContextResolver((id,scope)->new VideoPagePort.Page("1001","可信标题",10000),null);
+        var page=new RequestContext("1001","客户端标题",5000L,"a".repeat(64));
+        var request=new PreparationContextResolver.Request(UUID.randomUUID(),"解释当前片段","解释当前片段",LocalDate.now(),owner,MemoryTypes.View.empty(),page);
+        var result=resolver.resolve(request,()->new CallControl(Instant.now().plusSeconds(8),new CancellationToken()),stages);
+        assertEquals(page.sourceVersion(),result.memory().environment().sourceVersion());
+        assertEquals(5000L,result.memory().environment().playbackMs());
+    }
 }

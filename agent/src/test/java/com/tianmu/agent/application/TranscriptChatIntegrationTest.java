@@ -42,7 +42,7 @@ class TranscriptChatIntegrationTest {
         final SdkTracerProvider provider=SdkTracerProvider.builder().addSpanProcessor(SimpleSpanProcessor.create(recording)).build();
         final TranscriptRetrievalService reader=mock(TranscriptRetrievalService.class);
         final AtomicLong epoch=new AtomicLong(1);
-        final AtomicReference<String> source=new AtomicReference<>("source-v1");
+        final AtomicReference<String> source=new AtomicReference<>("a".repeat(64));
         final TranscriptChatService service=new TranscriptChatService(reader,policy("asr-v1"),provider.get("test"));
         final HookDispatcher hooks;
         final TransformDispatcher transforms;
@@ -73,7 +73,7 @@ class TranscriptChatIntegrationTest {
             tools=new ToolDispatcher(skills,harness,new ToolRegistry(handlers,catalog,skills));
             delivery=new DeliveryService(harness);ReflectionTestUtils.setField(delivery,"transcriptChat",service);
             assembler=new TaskAssembler(skills,new PromptCatalog(),catalog);ReflectionTestUtils.setField(assembler,"transcriptChat",service);
-            run.pageContext(new RequestContext("1001","lesson",60000L));
+            run.pageContext(new RequestContext("1001","lesson",60000L,"a".repeat(64)));
             var old=UUID.randomUUID();
             run.memory(new MemoryTypes.View(1,"UNSAFE_FUTURE_SUMMARY",List.of(new MemoryTypes.Message(UUID.randomUUID(),old,1,"assistant","UNSAFE_FUTURE_HISTORY",Instant.now())),false,run.pageContext(),null,
                 List.of(new MemoryTypes.Persistent(UUID.randomUUID(),1,"VIDEO","1001","FACT","UNSAFE_FUTURE_MEMORY")),List.of(new MemoryTypes.Compaction(UUID.randomUUID(),1,1,1,1,Map.of("text","UNSAFE_FUTURE_COMPACTION")))));
@@ -162,11 +162,22 @@ class TranscriptChatIntegrationTest {
             var context=((TaskConditions.Transcript)f.run.task().specification().typed()).context();
             var control=new com.tianmu.agent.runtime.control.CallControl(Instant.now().plusSeconds(10),new com.tianmu.agent.runtime.control.CancellationToken());
             f.source.set("source-v2");assertEquals("VIDEO_VERSION_CHANGED",assertThrows(AgentException.class,()->f.service.read(context,"",VIEWER,control)).code());
-            f.source.set("source-v1");f.epoch.incrementAndGet();assertEquals("VIDEO_VERSION_CHANGED",assertThrows(AgentException.class,()->f.service.read(context,"",VIEWER,control)).code());
+            f.source.set("a".repeat(64));f.epoch.incrementAndGet();assertEquals("VIDEO_VERSION_CHANGED",assertThrows(AgentException.class,()->f.service.read(context,"",VIEWER,control)).code());
             f.epoch.set(1);
             when(f.reader.query(eq(1001L),eq(VIEWER),any(),any())).thenAnswer(i->{f.epoch.incrementAndGet();return f.bundle(TranscriptRetrievalService.Status.READY,true);});
             assertEquals("VIDEO_VERSION_CHANGED",assertThrows(AgentException.class,()->f.service.read(context,"",VIEWER,control)).code());
             assertTrue(f.run.execution().evidence().snapshot().isEmpty());
+        }
+    }
+    @Test void bindingRejectsMissingOrMismatchedPlayerVersion() {
+        try(var f=new Fixture()) {
+            var spec=f.run.preparedRequest().specification();
+            for(String version:Arrays.asList(null,"b".repeat(64))) {
+                var run=new RunState(VIEWER,"解释当前片段");
+                var page=new RequestContext("1001","lesson",60000L,version);
+                run.pageContext(page);run.memory(MemoryTypes.View.empty().withContext(page,null));
+                assertEquals("VIDEO_VERSION_CHANGED",assertThrows(AgentException.class,()->f.service.bind(run,spec)).code());
+            }
         }
     }
     @Test void normalAndCreatorTasksRemainCompatibleAcrossChatToggleAndPolicyChanges() {

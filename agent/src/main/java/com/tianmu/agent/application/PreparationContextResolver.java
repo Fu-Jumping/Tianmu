@@ -32,8 +32,8 @@ public final class PreparationContextResolver {
                 var metadata=pages.page(Long.parseLong(page.videoId()),input.owner());controls.get().checkpoint();
                 if(metadata==null || !page.videoId().equals(metadata.videoId()))throw new AgentException("BUSINESS_UNAVAILABLE","Invalid page metadata");
                 videoDurationMs=metadata.durationMs();
-                page=new RequestContext(page.videoId(),metadata.title(),page.playbackMs()!=null && page.playbackMs()<metadata.durationMs()?page.playbackMs():null);
-            } else page=new RequestContext(page.videoId(),"",page.playbackMs());
+                page=new RequestContext(page.videoId(),metadata.title(),page.playbackMs()!=null && page.playbackMs()<metadata.durationMs()?page.playbackMs():null,page.sourceVersion());
+            } else page=new RequestContext(page.videoId(),"",page.playbackMs(),page.sourceVersion());
         }
         var discovery=VideoDiscovery.request(input.query(),input.businessDate());
         if(discovery.isPresent()) {
