@@ -16,6 +16,8 @@
 
 ## 模块参考
 
+- [视频个人助理生产化技术设计](视频个人助理生产化技术设计.md)：产品边界已确认，分批实施中；生产链路尚未完成。
+
 - [DeepSeek模型接入](DeepSeek模型接入.md)
 - [Harness-Trace与Hook设计](Harness-Trace与Hook设计.md)
 - [Hook变换链设计](Hook变换链设计.md)

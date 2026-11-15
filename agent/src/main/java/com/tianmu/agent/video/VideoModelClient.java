@@ -75,17 +75,30 @@ public final class VideoModelClient implements VisionModelPort, TranscriptionPor
         catch (Exception e) { throw new AgentException("INVALID_VIDEO_ANALYSIS","MiniMax returned invalid visual evidence"); }
     }
     public String transcribe(String audio, CallControl control) {
+        String text = transcriptionResult(audio, control).path("text").asText("");
+        if (text.length() > 12000) throw new AgentException("VIDEO_TRANSCRIPTION_FAILED", "Audio transcription unavailable");
+        return text;
+    }
+    @Override public com.tianmu.agent.video.content.TimedTranscript transcribeTimed(String audio,
+            long startMs, long endMs, CallControl control) {
+        if (startMs < 0 || endMs <= startMs) throw new IllegalArgumentException("Invalid audio clip");
+        JsonNode result = transcriptionResult(audio, control);
+        try {
+            return com.tianmu.agent.video.content.TimedTranscript.fromRelativeSeconds(result, startMs, endMs);
+        } catch (RuntimeException invalid) {
+            throw new AgentException("INVALID_TRANSCRIPT_TIMING", "Audio timestamps cannot be aligned to the playback clip");
+        }
+    }
+    private JsonNode transcriptionResult(String audio, CallControl control) {
         TraceAttributes.apply(Span.current(),Map.of("detail.prompt_state","NOT_APPLICABLE","prompt.variant","AUDIO_TRANSCRIPTION"));
         try {
             byte[] wav=Base64.getDecoder().decode(audio);
-            if (wav.length>4_000_000) throw new IllegalArgumentException();
+            if (wav.length==0 || wav.length>4_000_000) throw new IllegalArgumentException();
             String boundary="tianmu"+UUID.randomUUID().toString().replace("-","");
             var bytes=new java.io.ByteArrayOutputStream();
             bytes.write(("--"+boundary+"\r\nContent-Disposition: form-data; name=\"model\"\r\n\r\n"+config.transcriptionModel()+"\r\n--"+boundary+"\r\nContent-Disposition: form-data; name=\"file\"; filename=\"audio.wav\"\r\nContent-Type: audio/wav\r\n\r\n").getBytes(StandardCharsets.UTF_8));
             bytes.write(wav); bytes.write(("\r\n--"+boundary+"--\r\n").getBytes(StandardCharsets.UTF_8));
-            JsonNode result=send("/audio/transcriptions","multipart/form-data; boundary="+boundary,bytes.toByteArray(),control);
-            String text=result.path("text").asText("");
-            if (text.length()>12000) throw new IllegalArgumentException(); return text;
+            return send("/audio/transcriptions","multipart/form-data; boundary="+boundary,bytes.toByteArray(),control);
         } catch (AgentException e) { throw e; }
         catch (Exception e) { throw new AgentException("VIDEO_TRANSCRIPTION_FAILED", "Audio transcription unavailable"); }
     }
