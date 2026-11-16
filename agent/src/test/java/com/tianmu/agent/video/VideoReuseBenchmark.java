@@ -10,6 +10,7 @@ import java.nio.file.*;
 import java.net.URI;
 import java.time.*;
 import java.util.*;
+import java.util.concurrent.atomic.AtomicLong;
 /** Shadow fixture benchmark: source authorization and final answer generation are not under test. */
 public final class VideoReuseBenchmark {
     public static void main(String[] args) throws Exception {
@@ -25,19 +26,26 @@ public final class VideoReuseBenchmark {
         };
         var beans=new StaticListableBeanFactory();beans.addBean("fixture",port);
         var config=new VideoModelProperties(true,cfg.path("provider").asText(),URI.create(cfg.path("baseUrl").asText()),Files.readString(Path.of(cfg.path("visionKeyFile").asText())).strip(),cfg.path("model").asText(),"");
-        var vision=new VideoModelClient(config,json);var audio=BailianTranscriptionClient.create(cfg.path("region").asText(),Files.readString(Path.of(cfg.path("asrKeyFile").asText())).strip(),json,Duration.ofSeconds(60));
+        var rawVision=new VideoModelClient(config,json);var rawAudio=BailianTranscriptionClient.create(cfg.path("region").asText(),Files.readString(Path.of(cfg.path("asrKeyFile").asText())).strip(),json,Duration.ofSeconds(60));
+        var audioMs=new AtomicLong();var visionMs=new AtomicLong();
+        VisionModelPort vision=(m,f,t,c)->{long n=System.nanoTime();try{return rawVision.understand(m,f,t,c);}finally{visionMs.addAndGet((System.nanoTime()-n)/1_000_000);}};
+        TranscriptionPort audio=new TranscriptionPort(){
+            public String modelName(){return rawAudio.modelName();}
+            public String transcribe(String b,CallControl c){return rawAudio.transcribe(b,c);}
+            public com.tianmu.agent.video.content.TimedTranscript transcribeTimed(String b,long a,long z,CallControl c){long n=System.nanoTime();try{return rawAudio.transcribeTimed(b,a,z,c);}finally{audioMs.addAndGet((System.nanoTime()-n)/1_000_000);}}
+        };
         var scope=new AccessScope("shadow","same-viewer",Set.of(old.source().videoId()));
         var reused=new VideoAnalysisService(config,beans.getBeanProvider(VideoContentPort.class),new VideoContentCache(beans.getBeanProvider(javax.sql.DataSource.class),json),OpenTelemetry.noop().getTracer("shadow"),vision,audio,new VideoAnalysisFlights());
         var field=VideoAnalysisService.class.getDeclaredField("reuse");field.setAccessible(true);field.set(reused,new VideoReusePolicy(true));
         reused.analyze(old.source().videoId(),old.startMs(),old.endMs(),"",scope,control());requests.clear();
         var baseline=new VideoAnalysisService(config,beans.getBeanProvider(VideoContentPort.class),new VideoContentCache(beans.getBeanProvider(javax.sql.DataSource.class),json),OpenTelemetry.noop().getTracer("shadow"),vision,audio,new VideoAnalysisFlights());
         for(boolean reuse:new boolean[]{false,true}){
-            requests.clear();long start=System.nanoTime();var output=new LinkedHashMap<String,Object>();output.put("reuse",reuse);
+            requests.clear();audioMs.set(0);visionMs.set(0);long start=System.nanoTime();var output=new LinkedHashMap<String,Object>();output.put("reuse",reuse);
             try{
                 var result=reuse?reused.analyzeCurrent(full.source().videoId(),full.startMs(),full.endMs(),full.endMs()-90000,"",scope,control()):List.of(baseline.analyze(full.source().videoId(),full.startMs(),full.endMs(),"",scope,control()));
                 output.put("status","SUCCEEDED");output.put("parts",result);
             }catch(Exception error){output.put("status","FAILED");output.put("errorType",error.getClass().getSimpleName());if(error instanceof com.tianmu.agent.core.AgentException e)output.put("errorCode",e.code());}
-            output.put("elapsedMs",(System.nanoTime()-start)/1_000_000);output.put("extractedRanges",List.copyOf(requests));System.out.println(json.writeValueAsString(output));System.out.flush();
+            output.put("elapsedMs",(System.nanoTime()-start)/1_000_000);output.put("audioMs",audioMs.get());output.put("visionMs",visionMs.get());output.put("extractedRanges",List.copyOf(requests));System.out.println(json.writeValueAsString(output));System.out.flush();
         }
     }
     private static CallControl control(){return new CallControl(Instant.now().plusSeconds(100),new CancellationToken());}

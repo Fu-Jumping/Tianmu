@@ -1,0 +1,41 @@
+{
+  "date": "2026-11-16",
+  "implementation": "bc160a5",
+  "scope": "Production-host shadow test of frozen fixtures. Stopwatch measures provider adapters and fixture analysis, not end-to-end requests; no production traffic switch.",
+  "inputSha256": "4e89a6f86de653380463a022772a709e1ad38bfe7595c01b7c61ec31d5858f15",
+  "samples": [
+    {
+      "reuse": false,
+      "status": "SUCCEEDED",
+      "elapsedMs": 22911,
+      "audioMs": 13389,
+      "visionMs": 9517,
+      "extractedRanges": [
+        [
+          280973,
+          310973
+        ]
+      ]
+    },
+    {
+      "reuse": true,
+      "status": "SUCCEEDED",
+      "elapsedMs": 13357,
+      "audioMs": 3830,
+      "visionMs": 9349,
+      "extractedRanges": [
+        [
+          304973,
+          310973
+        ]
+      ]
+    }
+  ],
+  "findings": [
+    "This paired sample was 22911ms without reuse and 13357ms with reuse; audio was 13389ms versus 3830ms, while vision was 9517ms versus 9349ms.",
+    "The previous 42978ms sample was not instrumented, so its cause remains unknown.",
+    "One paired sample is insufficient for a P90 or reliable speedup claim; upstream caching and provider variance remain unmeasured.",
+    "No human evaluation of final answers or real authorization replay was performed."
+  ],
+  "decision": "KEEP_REUSE_DISABLED"
+}
