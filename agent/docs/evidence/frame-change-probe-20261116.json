@@ -1,0 +1,70 @@
+{
+  "method": "grayscale 240x135, Gaussian radius 1, absolute pixel difference",
+  "pairs": [
+    {
+      "before": "mapping-250",
+      "after": "mapping-260",
+      "observation": "new handwriting and person movement",
+      "meanAbsoluteDifference": 12.871,
+      "fractionPixelsAbove25": 0.14997
+    },
+    {
+      "before": "mapping-260",
+      "after": "mapping-270",
+      "observation": "new handwriting and person movement",
+      "meanAbsoluteDifference": 16.221,
+      "fractionPixelsAbove25": 0.18701
+    },
+    {
+      "before": "mapping-300",
+      "after": "mapping-310",
+      "observation": "same board, person moves",
+      "meanAbsoluteDifference": 6.907,
+      "fractionPixelsAbove25": 0.07738
+    },
+    {
+      "before": "floor-600",
+      "after": "floor-610",
+      "observation": "new lower-board formula and person movement",
+      "meanAbsoluteDifference": 15.26,
+      "fractionPixelsAbove25": 0.15599
+    },
+    {
+      "before": "running-1",
+      "after": "running-3",
+      "observation": "person enters frame",
+      "meanAbsoluteDifference": 9.904,
+      "fractionPixelsAbove25": 0.14139
+    },
+    {
+      "before": "running-3",
+      "after": "running-5",
+      "observation": "runner moves across frame",
+      "meanAbsoluteDifference": 15.345,
+      "fractionPixelsAbove25": 0.22741
+    }
+  ],
+  "date": "2026-11-16",
+  "status": "EXPLORATORY_NOT_VALIDATED",
+  "sources": [
+    {
+      "path": "materials/songhao-math/01-30min.mp4",
+      "sha256": "e44531a759a4ce2a0992c01c3ed45eca4d761af471663a115a2bff492567de0c"
+    },
+    {
+      "path": "materials/songhao-math/03-30min.mp4",
+      "sha256": "98a7605f471f3026d4b04778eb7cbb99571c4d0f1af137c5869be3857cef9338"
+    },
+    {
+      "path": "materials/videos/2114366777587798016.mp4",
+      "sha256": "92f2b4eaa7d44d7001f88f3abd297a48742025c7a44b7b88f3f8d935cdfcda85"
+    }
+  ],
+  "limitations": [
+    "Six frame pairs manually inspected; not a labeled evaluation set, and no sensitivity or specificity may be inferred.",
+    "Image differences are correlated with human movement and occlusion, as well as board changes.",
+    "A threshold above 12.871 would skip a pair with new handwriting; a threshold above 9.904 would skip a runner entering.",
+    "No unchanged-video baseline across lighting changes or mobile footage. No final-answer or latency test."
+  ],
+  "decision": "DO_NOT_USE_GLOBAL_THRESHOLD_AS_A_SKIP_GATE"
+}
