@@ -1,0 +1,195 @@
+{
+  "date": "2026-11-16",
+  "implementation": "461ff5f",
+  "scope": "Shadow audio/visual material preparation on production host, not end-to-end user requests. No application restart or traffic switch.",
+  "mediaSha256": "24ad47078c1b4497d344b9fa2f1b6b1e083b34e0fe0950cb68060161c50d758c",
+  "fixtures": [
+    {
+      "id": "current",
+      "startMs": 275973,
+      "endMs": 305973,
+      "frames": 12
+    },
+    {
+      "id": "prior",
+      "startMs": 215973,
+      "endMs": 275973,
+      "frames": 12
+    }
+  ],
+  "samples": [
+    {
+      "fixture": "current",
+      "parallel": false,
+      "status": "SUCCEEDED",
+      "elapsedMs": 15654,
+      "audioMs": 5818,
+      "visualMs": 9800,
+      "usage": {
+        "usage.attempted_calls": 2,
+        "usage.complete": false,
+        "usage.unreported_calls": 2,
+        "usage.scope": "RUN_PROCESS_SEGMENT",
+        "usage.cache_reported_calls": 0,
+        "usage.reported_calls": 0,
+        "usage.state": "NOT_REPORTED",
+        "usage.external_model_calls": 2
+      },
+      "order": "serial-first",
+      "visualDigest": "cb7fca2be09a5552e4e43da061231e4431b44a2756ffbbf97d397c6fedd83c4e"
+    },
+    {
+      "fixture": "current",
+      "parallel": true,
+      "status": "SUCCEEDED",
+      "elapsedMs": 25784,
+      "audioMs": 4425,
+      "visualMs": 25721,
+      "usage": {
+        "usage.attempted_calls": 2,
+        "usage.complete": false,
+        "usage.unreported_calls": 2,
+        "usage.scope": "RUN_PROCESS_SEGMENT",
+        "usage.cache_reported_calls": 0,
+        "usage.reported_calls": 0,
+        "usage.state": "NOT_REPORTED",
+        "usage.external_model_calls": 2
+      },
+      "order": "serial-first",
+      "visualDigest": "e7b1d394d3a6909d0514a2238a9d20980973b5e4391064aa207cb7705537559d"
+    },
+    {
+      "fixture": "prior",
+      "parallel": false,
+      "status": "FAILED",
+      "elapsedMs": 34319,
+      "audioMs": 24344,
+      "visualMs": 9974,
+      "usage": {
+        "usage.attempted_calls": 2,
+        "usage.complete": false,
+        "usage.unreported_calls": 2,
+        "usage.scope": "RUN_PROCESS_SEGMENT",
+        "usage.cache_reported_calls": 0,
+        "usage.reported_calls": 0,
+        "usage.state": "NOT_REPORTED",
+        "usage.external_model_calls": 2
+      },
+      "errorType": "AgentException",
+      "order": "serial-first"
+    },
+    {
+      "fixture": "prior",
+      "parallel": true,
+      "status": "SUCCEEDED",
+      "elapsedMs": 25860,
+      "audioMs": 25853,
+      "visualMs": 8609,
+      "usage": {
+        "usage.attempted_calls": 2,
+        "usage.complete": false,
+        "usage.unreported_calls": 2,
+        "usage.scope": "RUN_PROCESS_SEGMENT",
+        "usage.cache_reported_calls": 0,
+        "usage.reported_calls": 0,
+        "usage.state": "NOT_REPORTED",
+        "usage.external_model_calls": 2
+      },
+      "order": "serial-first",
+      "visualDigest": "38ff9713de6ec2f943055cc203ed78c562aa685aa1331ede5b9f20290ec7579e"
+    },
+    {
+      "fixture": "current",
+      "parallel": true,
+      "status": "SUCCEEDED",
+      "elapsedMs": 16955,
+      "audioMs": 6710,
+      "visualMs": 16675,
+      "usage": {
+        "usage.attempted_calls": 2,
+        "usage.complete": false,
+        "usage.unreported_calls": 2,
+        "usage.scope": "RUN_PROCESS_SEGMENT",
+        "usage.cache_reported_calls": 0,
+        "usage.reported_calls": 0,
+        "usage.state": "NOT_REPORTED",
+        "usage.external_model_calls": 2
+      },
+      "order": "parallel-first",
+      "visualDigest": "e7b1d394d3a6909d0514a2238a9d20980973b5e4391064aa207cb7705537559d"
+    },
+    {
+      "fixture": "current",
+      "parallel": false,
+      "status": "SUCCEEDED",
+      "elapsedMs": 17285,
+      "audioMs": 8332,
+      "visualMs": 8952,
+      "usage": {
+        "usage.attempted_calls": 2,
+        "usage.complete": false,
+        "usage.unreported_calls": 2,
+        "usage.scope": "RUN_PROCESS_SEGMENT",
+        "usage.cache_reported_calls": 0,
+        "usage.reported_calls": 0,
+        "usage.state": "NOT_REPORTED",
+        "usage.external_model_calls": 2
+      },
+      "order": "parallel-first",
+      "visualDigest": "cb7fca2be09a5552e4e43da061231e4431b44a2756ffbbf97d397c6fedd83c4e"
+    },
+    {
+      "fixture": "prior",
+      "parallel": true,
+      "status": "SUCCEEDED",
+      "elapsedMs": 18890,
+      "audioMs": 14521,
+      "visualMs": 18885,
+      "usage": {
+        "usage.attempted_calls": 2,
+        "usage.complete": false,
+        "usage.unreported_calls": 2,
+        "usage.scope": "RUN_PROCESS_SEGMENT",
+        "usage.cache_reported_calls": 0,
+        "usage.reported_calls": 0,
+        "usage.state": "NOT_REPORTED",
+        "usage.external_model_calls": 2
+      },
+      "order": "parallel-first",
+      "visualDigest": "38ff9713de6ec2f943055cc203ed78c562aa685aa1331ede5b9f20290ec7579e"
+    },
+    {
+      "fixture": "prior",
+      "parallel": false,
+      "status": "SUCCEEDED",
+      "elapsedMs": 21897,
+      "audioMs": 12592,
+      "visualMs": 9304,
+      "usage": {
+        "usage.attempted_calls": 2,
+        "usage.complete": false,
+        "usage.unreported_calls": 2,
+        "usage.scope": "RUN_PROCESS_SEGMENT",
+        "usage.cache_reported_calls": 0,
+        "usage.reported_calls": 0,
+        "usage.state": "NOT_REPORTED",
+        "usage.external_model_calls": 2
+      },
+      "order": "parallel-first",
+      "visualDigest": "cacce20eff5c522f249dbb1398c0e2fbc8349fe2ebd46a2562d62ebd4357a388"
+    }
+  ],
+  "decision": "KEEP_PARALLEL_DISABLED",
+  "findings": [
+    "No consistent latency improvement on the 30-second window.",
+    "The successful reverse-order 60-second pair was 21897ms serial versus 18890ms parallel. This is one pair, not a P90 result.",
+    "Independent vision misread the visible definition-domain annotation as x correspondence. The corresponding 284723ms frame was visually inspected.",
+    "One first-round serial sample failed with AgentException; the original runner did not record its error code.",
+    "Some repeated visual outputs were identical. Upstream caching cannot be ruled out; application material caching was bypassed.",
+    "Providers did not report token usage; monetary cost could not be compared."
+  ],
+  "remaining": [
+    "Shared/range-aware material reuse is not implemented.",
+    "No human-labelled full answer comparison or end-to-end latency acceptance has passed."
+  ]
+}
