@@ -39,7 +39,7 @@ public final class VideoReuseBenchmark {
         var field=VideoAnalysisService.class.getDeclaredField("reuse");field.setAccessible(true);field.set(reused,new VideoReusePolicy(true));
         reused.analyze(old.source().videoId(),old.startMs(),old.endMs(),"",scope,control());requests.clear();
         var baseline=new VideoAnalysisService(config,beans.getBeanProvider(VideoContentPort.class),new VideoContentCache(beans.getBeanProvider(javax.sql.DataSource.class),json),OpenTelemetry.noop().getTracer("shadow"),vision,audio,new VideoAnalysisFlights());
-        for(boolean reuse:new boolean[]{false,true}){
+        for(boolean reuse:args.length>2 && "reverse".equals(args[2])?new boolean[]{true,false}:new boolean[]{false,true}){
             requests.clear();audioMs.set(0);visionMs.set(0);long start=System.nanoTime();var output=new LinkedHashMap<String,Object>();output.put("reuse",reuse);
             try{
                 var result=reuse?reused.analyzeCurrent(full.source().videoId(),full.startMs(),full.endMs(),full.endMs()-90000,"",scope,control()):List.of(baseline.analyze(full.source().videoId(),full.startMs(),full.endMs(),"",scope,control()));

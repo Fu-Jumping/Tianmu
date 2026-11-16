@@ -1,0 +1,85 @@
+{
+  "date": "2026-11-16",
+  "implementation": "bc160a5",
+  "scope": "Repeated production-host shadow fixture material preparation; excludes warm-up, video extraction, final answers and live authorization. Serving traffic was not switched.",
+  "inputSha256": "4e89a6f86de653380463a022772a709e1ad38bfe7595c01b7c61ec31d5858f15",
+  "samples": [
+    {
+      "reuse": true,
+      "status": "SUCCEEDED",
+      "elapsedMs": 11509,
+      "audioMs": 1012,
+      "visionMs": 10449,
+      "extractedRanges": [
+        [
+          304973,
+          310973
+        ]
+      ],
+      "order": "reverse",
+      "transcriptDigests": [
+        "037a9de5ca36e31dd072db185d056f72adc0db85d0d188d26dddb7fc50d21ed7",
+        "3276ed7af6c8e3a5a44c8d8d368161392d533a3412dd2f9de755261007feb0ec"
+      ]
+    },
+    {
+      "reuse": false,
+      "status": "SUCCEEDED",
+      "elapsedMs": 12947,
+      "audioMs": 4236,
+      "visionMs": 8707,
+      "extractedRanges": [
+        [
+          280973,
+          310973
+        ]
+      ],
+      "order": "reverse",
+      "transcriptDigests": [
+        "010ef8a3a39b35170a4927448318ba098f9c4790d70cfe321669a399678b5aba"
+      ]
+    },
+    {
+      "reuse": false,
+      "status": "SUCCEEDED",
+      "elapsedMs": 14586,
+      "audioMs": 5555,
+      "visionMs": 9025,
+      "extractedRanges": [
+        [
+          280973,
+          310973
+        ]
+      ],
+      "order": "forward",
+      "transcriptDigests": [
+        "010ef8a3a39b35170a4927448318ba098f9c4790d70cfe321669a399678b5aba"
+      ]
+    },
+    {
+      "reuse": true,
+      "status": "SUCCEEDED",
+      "elapsedMs": 11867,
+      "audioMs": 2316,
+      "visionMs": 9511,
+      "extractedRanges": [
+        [
+          304973,
+          310973
+        ]
+      ],
+      "order": "forward",
+      "transcriptDigests": [
+        "037a9de5ca36e31dd072db185d056f72adc0db85d0d188d26dddb7fc50d21ed7",
+        "3276ed7af6c8e3a5a44c8d8d368161392d533a3412dd2f9de755261007feb0ec"
+      ]
+    }
+  ],
+  "observations": [
+    "All four requests succeeded. Reuse processed the 6000ms tail after the prior source was warmed; baseline processed the full 30000ms.",
+    "The repeated transcript results are identical per mode; upstream caching or deterministic provider behavior cannot be distinguished.",
+    "The prior 42978ms reuse sample remains unexplained and is not excluded from the broader latency picture.",
+    "Current samples cover one video and one anchor only; no final-answer human review, P90, cost comparison, revocation/replacement acceptance or end-to-end measurement was performed."
+  ],
+  "decision": "KEEP_REUSE_DISABLED"
+}
