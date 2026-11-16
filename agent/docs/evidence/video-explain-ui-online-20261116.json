@@ -1,0 +1,12 @@
+{
+  "date":"2026-11-16",
+  "revision":"5de5c76",
+  "agentJarSha256":"c832ce4c7ef90c06d648a1e5a925266abfcf1676ccaa8f8f0bcbe3fd4bd76aea",
+  "frontendIndexSha256":"dff80a99331a4d333acbe57eeb2f6a49f166190d6ea9b5156b868d2bd9f0c318",
+  "localVerification":{"frontendTestsPassed":169,"backendTestsPassed":17,"productionBuild":"SUCCEEDED","standaloneRendererWidths":[1440,1024,390]},
+  "liveRun":{"runId":"7340f428-f18d-4511-82f7-98070bafea8e","traceId":"07d921bf718732e9f34ffadbcf0f8bcb","status":"SUCCEEDED","seconds":10.4,"audioEvidence":true,"cacheHit":true},
+  "liveBrowser":{"widths":[1440,390],"answerRendered":true,"emphasisRendered":true,"fullVideoIndexCollapsed":true,"horizontalOverflow":false},
+  "qualityResult":"NOT_PASSED",
+  "qualityIssues":["Answer remains too long for the default prompt.","Internal playback_range label appeared in user-facing answer.","The answer incorrectly calls D a subscript; f is the subscript in D_f.","No semantic review receipt or checked-answer delivery has been implemented.","Multi-turn source-dependency binding remains unimplemented."],
+  "limitations":["Live browser test replayed the real completed Run and did not create a second request.","Formula rendering was verified in local standalone renderer tests, not a live mathematical-formula response.","No human evaluation, full fixed-set quality test or live multi-turn acceptance was performed."]
+}
