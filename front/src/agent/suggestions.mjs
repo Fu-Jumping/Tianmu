@@ -5,8 +5,8 @@ const general = [
   { icon: 'route', title: '制定计划', description: '按时间和目标安排步骤', text: '帮我制定每天二十分钟的摄影入门学习计划。' },
 ]
 const publicVideo = [
-  { icon: 'play', title: '概括视频', description: '根据可用画面了解内容', text: '概括这个视频的画面内容。' },
-  { icon: 'clock', title: '解释当前片段', description: '结合当前播放位置提问', text: '解释这个视频当前播放位置附近的画面。' },
+  { icon: 'clock', title: '讲懂这里', description: '解释当前内容，帮你理清楚', text: '讲讲这个视频当前播放位置的内容，帮我理解。' },
+  { icon: 'play', title: '概括视频', description: '概括当前可用的视频材料', text: '概括这个视频的内容，并说明实际覆盖范围。' },
 ]
 const creatorVideo = [
   { icon: 'list', title: '观众反馈报告', description: '整理弹幕与评论，查看主要话题和观众原话', text: '请分析这个视频全部的弹幕和评论，结合实际视频画面生成观众反馈报告，包含主要话题、观众原话和改进建议。' },

@@ -49,14 +49,14 @@
           <section v-if="!conversationTurns.length" class="workspace-intro">
             <div class="welcome-symbol" aria-hidden="true"><EchoMark /></div>
             <h1>{{ contextPending ? '正在确认视频访问权限' : form.videoId ? '了解这条视频' : '把问题和想法理清楚' }}</h1>
-            <p>{{ contextPending ? '确认后展示当前可用的功能。' : form.videoId ? (creator ? '了解视频内容，也可以使用作者专属功能整理反馈、起草互动内容。' : '根据可用画面概括内容，或解释当前片段。') : '解释概念、整理思路，或一起制定计划。' }}</p>
+            <p>{{ contextPending ? '确认后展示当前可用的功能。' : form.videoId ? (creator ? '了解视频内容，也可以使用作者专属功能整理反馈、起草互动内容。' : '哪里没看懂？结合视频内容一起理清楚。') : '解释概念、整理思路，或一起制定计划。' }}</p>
             <section v-for="group in suggestionGroups" :key="group.id" class="suggestion-section" :aria-label="group.title || '常用提问'">
             <h2 v-if="group.title" class="suggestion-heading">{{ group.title }}</h2>
             <div class="suggestion-grid" :class="{ 'creator-suggestions': group.id === 'creator' }">
               <button
                 v-for="(item,index) in group.items"
                 :key="item.text"
-                :class="{ 'is-primary': group.id === 'creator' && index === 0 }"
+                :class="{ 'is-primary': (group.id === 'creator' || group.id === 'public') && index === 0 }"
                 @click="useSuggestion(item)"
               >
                 <span class="suggestion-icon"><TraceIcon :name="item.icon" :size="16" /></span
@@ -106,7 +106,7 @@
                 </div>
                 <template v-if="!(turn.snapshot?.status === 'FAILED' && turn.snapshot?.task?.specification?.type === 'creator.draft')">
                   <p v-for="note in turn.streamingNotes || []" :key="note.sequence" class="answer-text">{{ note.text }}</p>
-                  <p v-if="turn.streamingText && !turn.snapshot?.answer && turn.snapshot?.status !== 'NEEDS_INPUT'" class="answer-text" aria-live="polite">{{ turn.streamingText }}</p>
+                  <AnswerContent v-if="turn.streamingText && !turn.snapshot?.answer && turn.snapshot?.status !== 'NEEDS_INPUT'" class="answer-text" :text="turn.streamingText" aria-live="polite" />
                 </template>
                 <MemoryUsage v-if="validRunId(turn.runId) && isTerminal(turn.snapshot?.status)" :run-id="turn.runId" />
 
@@ -125,9 +125,7 @@
                 <p v-if="turn.snapshot?.status === 'NEEDS_INPUT'" class="answer-text clarification">
                   {{ turn.snapshot.clarification }}
                 </p>
-                <p v-if="turn.snapshot?.answer" class="answer-text">
-                  {{ displayReportAnswer(turn.runId, answerPresentation(turn.snapshot.answer).text) }}
-                </p>
+                <AnswerContent v-if="turn.snapshot?.answer" class="answer-text" :text="displayReportAnswer(turn.runId, answerPresentation(turn.snapshot.answer).text)" />
                 <details v-if="!turn.reportPath && answerPresentation(turn.snapshot?.answer).notes.length" class="answer-data-notes">
                   <summary>数据说明</summary>
                   <div v-for="(note, index) in answerPresentation(turn.snapshot.answer).notes" :key="index">
@@ -226,7 +224,7 @@
             :placeholder="
               needsInput
                 ? '补充信息…'
-                : form.videoId ? '问问这个视频的内容、某个片段，或聊聊观众反馈…' : '聊聊你的问题，或说说正在酝酿的想法…'
+                : form.videoId ? '哪里没看懂？可以直接问我。' : '聊聊你的问题，或说说正在酝酿的想法…'
             "
             @compositionstart="compositionGuard.start"
             @compositionend="compositionGuard.end"
@@ -269,6 +267,7 @@ import VideoContentIndex from '@/components/agent/VideoContentIndex.vue';
 import { getAssistantModels } from '@/api/agent';
 import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue';
 import MemoryManager from '@/components/agent/MemoryManager.vue';
+import AnswerContent from '@/components/agent/AnswerContent.vue';
 import MemoryUsage from '@/components/agent/MemoryUsage.vue';
 import CreatorDraft from '@/components/agent/CreatorDraft.vue';
 import { createCompositionGuard } from '@/agent/composer-input.mjs';

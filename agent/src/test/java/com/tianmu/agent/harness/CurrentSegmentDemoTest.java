@@ -25,7 +25,7 @@ class CurrentSegmentDemoTest {
         assertEquals(270000L,s.reading().videoStartMs());assertEquals("current_playback_default",s.provenance().get("start_ms"));
     }
     @Test void clipsAtVideoEdgesAndPreservesExplicitBounds() {
-        for(String text:List.of("请解释当前播放位置附近黑板上的例题。","解释一下这里"))
+        for(String text:List.of("请解释当前播放位置附近黑板上的例题。","解释一下这里","讲讲这个视频当前播放位置的内容，帮我理解。"))
             assertEquals(270000L,resolve(text,300000L,1799964).conditions().get("start_ms"));
         assertEquals("AMBIGUOUS_ANALYSIS_SOURCES",assertThrows(AgentException.class,()->resolve("解释当前片段的画面",0L,1799964)).code());
         assertEquals(0L,resolve("解释当前片段的画面",1000L,1799964).conditions().get("start_ms"));
