@@ -1,0 +1,160 @@
+{
+  "date": "2026-11-16",
+  "implementation": "frame-count-shadow-v1",
+  "scope": "Production-host isolated visual-model calls for three six-second local fixtures. This is not a live agent run or end-to-end latency measurement. No serving-container restart or traffic switch.",
+  "inputSha256": "485b79ce7bae901ce3dccc10af81c3fbb12ca7ad7e816a211daae342467e2726",
+  "selection": "12 evenly spaced frames; 6 and 3 are deterministic subsets of the same 12 images. All variants for a fixture received the same separately obtained ASR text, if audio existed. Calls ran in fixed 12,6,3 order.",
+  "samples": [
+    {
+      "fixture": "mapping-tail",
+      "frames": 12,
+      "status": "SUCCEEDED",
+      "elapsedMs": 11459,
+      "audioStatus": "READY",
+      "sampledAtMs": [
+        305223,
+        305723,
+        306223,
+        306723,
+        307223,
+        307723,
+        308223,
+        308723,
+        309223,
+        309723,
+        310223,
+        310723
+      ]
+    },
+    {
+      "fixture": "mapping-tail",
+      "frames": 6,
+      "status": "SUCCEEDED",
+      "elapsedMs": 6362,
+      "audioStatus": "READY",
+      "sampledAtMs": [
+        305723,
+        306723,
+        307723,
+        308723,
+        309723,
+        310723
+      ]
+    },
+    {
+      "fixture": "mapping-tail",
+      "frames": 3,
+      "status": "SUCCEEDED",
+      "elapsedMs": 5361,
+      "audioStatus": "READY",
+      "sampledAtMs": [
+        306223,
+        308223,
+        310223
+      ]
+    },
+    {
+      "fixture": "floor-tail",
+      "frames": 12,
+      "status": "SUCCEEDED",
+      "elapsedMs": 8227,
+      "audioStatus": "READY",
+      "sampledAtMs": [
+        594250,
+        594750,
+        595250,
+        595750,
+        596250,
+        596750,
+        597250,
+        597750,
+        598250,
+        598750,
+        599250,
+        599750
+      ]
+    },
+    {
+      "fixture": "floor-tail",
+      "frames": 6,
+      "status": "SUCCEEDED",
+      "elapsedMs": 7284,
+      "audioStatus": "READY",
+      "sampledAtMs": [
+        594750,
+        595750,
+        596750,
+        597750,
+        598750,
+        599750
+      ]
+    },
+    {
+      "fixture": "floor-tail",
+      "frames": 3,
+      "status": "SUCCEEDED",
+      "elapsedMs": 8353,
+      "audioStatus": "READY",
+      "sampledAtMs": [
+        595250,
+        597250,
+        599250
+      ]
+    },
+    {
+      "fixture": "sword",
+      "frames": 12,
+      "status": "SUCCEEDED",
+      "elapsedMs": 7123,
+      "audioStatus": "NO_AUDIO",
+      "sampledAtMs": [
+        4250,
+        4750,
+        5250,
+        5750,
+        6250,
+        6750,
+        7250,
+        7750,
+        8250,
+        8750,
+        9250,
+        9750
+      ]
+    },
+    {
+      "fixture": "sword",
+      "frames": 6,
+      "status": "SUCCEEDED",
+      "elapsedMs": 6021,
+      "audioStatus": "NO_AUDIO",
+      "sampledAtMs": [
+        4750,
+        5750,
+        6750,
+        7750,
+        8750,
+        9750
+      ]
+    },
+    {
+      "fixture": "sword",
+      "frames": 3,
+      "status": "SUCCEEDED",
+      "elapsedMs": 6283,
+      "audioStatus": "NO_AUDIO",
+      "sampledAtMs": [
+        5250,
+        7250,
+        9250
+      ]
+    }
+  ],
+  "manualFindings": [
+    "In mapping-tail the 6-frame and 3-frame outputs read the visible 定义域 as 对应域; inspection of frame 305723 shows 定义域.",
+    "The non-teaching sword fixture is visually static, and cannot establish performance on dynamic video.",
+    "Provider token/cost and upstream cache state were not measured. Three fixtures and one call per configuration are insufficient for P90 or generalized accuracy.",
+    "No final-answer or end-to-end user-flow evaluation was performed."
+  ],
+  "decision": "KEEP_EXISTING_FRAME_POLICY"
+}
