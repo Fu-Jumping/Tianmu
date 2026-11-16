@@ -13,6 +13,7 @@ public final class EvidenceCompletionRequirement implements CompletionRequiremen
     public void verify(CompletionEvaluator.Input input,CompletionEvaluator.Deliver proposal) {
         if(input.task()==null)return;
         var task=input.task();var answer=proposal.draft();
+        requireGroupedReferences(answer,input.exchanges());
         if(answer==null || answer.text()==null || answer.text().isBlank() || answer.text().length()>8000 || answer.evidenceIds().size()>10
                 || !"conversation".equals(task.specification().type()) && answer.evidenceIds().isEmpty())throw new AgentException("INVALID_ANSWER","A bounded answer with evidence is required");
         if(ResourceSelection.requiresEvidence(task.specification(),input.exchanges().stream().map(ToolExchange::result).toList()))throw new AgentException("INVALID_EVIDENCE","Discovery requires a host receipt");
@@ -24,5 +25,15 @@ public final class EvidenceCompletionRequirement implements CompletionRequiremen
         }
         AnalysisExecutionPolicy.requireComplete(task.specification(),selected);
         AnalysisExecutionPolicy.requireTopicsRead(task.specification(),selected,input.exchanges());
+    }
+    public static void requireGroupedReferences(Answer answer,List<ToolExchange> exchanges){
+        if(answer==null)return;
+        var cited=new HashSet<>(answer.evidenceIds());
+        for(var exchange:exchanges){
+            var result=exchange.result();if(result.additionalEvidenceIds().isEmpty())continue;
+            var group=result.allEvidenceIds();
+            if(group.stream().anyMatch(cited::contains) && !cited.containsAll(group))
+                throw new AgentException("INVALID_EVIDENCE","A multi-material result requires all original source references");
+        }
     }
 }

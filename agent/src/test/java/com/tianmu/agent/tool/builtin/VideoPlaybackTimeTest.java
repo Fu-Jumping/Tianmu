@@ -6,6 +6,20 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.*;
 
 class VideoPlaybackTimeTest {
+    @Test void reusedAndFreshClipsAreRegisteredSeparately(){
+        var old=new com.tianmu.agent.core.VideoContent.Facts("video-content-v1",123,"v1",270000,300000,"旧片段",java.util.List.of(),"","SAMPLED_FRAMES",java.util.List.of(271250L),"model",java.time.Instant.now());
+        var tail=new com.tianmu.agent.core.VideoContent.Facts("video-content-v1",123,"v1",299000,305000,"新片段",java.util.List.of(),"","SAMPLED_FRAMES",java.util.List.of(301000L),"model",java.time.Instant.now());
+        var context=mock(com.tianmu.agent.tool.ToolContext.class);
+        var video=mock(com.tianmu.agent.video.VideoAnalysisService.class);when(video.reuseEnabled()).thenReturn(true);
+        when(context.currentVideoWindow()).thenReturn(java.util.Optional.of(new com.tianmu.agent.application.CurrentVideoWindow(123,275000,305000,215000)));
+        when(context.videoQuery(any())).thenReturn(java.util.List.of(old,tail));
+        when(context.registerVideoEvidence(old)).thenReturn(new com.tianmu.agent.core.AgentTypes.Evidence("old",java.util.UUID.randomUUID(),null,null,null,old));
+        when(context.registerVideoEvidence(tail)).thenReturn(new com.tianmu.agent.core.AgentTypes.Evidence("tail",java.util.UUID.randomUUID(),null,null,null,tail));
+        var result=new AnalyzeVideoContentTool(video,new com.fasterxml.jackson.databind.ObjectMapper().findAndRegisterModules()).execute(new com.tianmu.agent.core.AgentTypes.ToolCall("analyze_video_content",java.util.Map.of("video_id",123)),context);
+        assertEquals(java.util.List.of("old","tail"),result.allEvidenceIds());
+        assertEquals(2,((java.util.List<?>)result.data().get("materials")).size());
+        verify(context).checkVideoQuery(123,270000L,300000L);verify(context).checkVideoQuery(123,299000L,305000L);
+    }
     @Test void convertsMillisecondsWithoutLosingFractionOrHours() {
         assertEquals("04:30",AnalyzeVideoContentTool.playbackTime(270000));
         assertEquals("05:00",AnalyzeVideoContentTool.playbackTime(300000));

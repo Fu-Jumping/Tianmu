@@ -24,6 +24,21 @@ public final class AnalyzeVideoContentTool implements AgentTool {
         final Long selectedStart=start, selectedEnd=end;
         context.checkVideoQuery(id,selectedStart,selectedEnd);
         String focus=call.arguments().containsKey("focus")?ToolArguments.text(call,"focus"):"";
+        if(video!=null && video.reuseEnabled() && window.isPresent()
+                && selectedStart!=null && selectedStart==window.get().initialStartMs() && selectedEnd==window.get().endMs()){
+            var parts=context.videoQuery(control->video.analyzeCurrent(id,selectedStart,selectedEnd,window.get().allowedStartMs(),focus,context.scope(),control));
+            var materials=new java.util.ArrayList<Map<String,Object>>();var ids=new java.util.ArrayList<String>();
+            for(var part:parts){
+                context.checkVideoQuery(id,part.startMs(),part.endMs());var e=context.registerVideoEvidence(part);ids.add(e.id());
+                materials.add(Map.of("analysis",json.convertValue(part,new com.fasterxml.jackson.core.type.TypeReference<Map<String,Object>>(){}),"evidence_id",e.id(),
+                        "playback_range",Map.of("start",playbackTime(part.startMs()),"end",playbackTime(part.endMs()))));
+            }
+            var data=new java.util.LinkedHashMap<String,Object>();data.put("materials",materials);data.put("question",focus);
+            data.put("limitations","Each material retains its complete original source range and precision. Overlapping clips can repeat spoken text; do not treat repetitions as multiple events or invent sentence timestamps.");
+            long earliest=parts.stream().mapToLong(p->p.startMs()).min().orElseThrow();
+            if(earliest>window.get().allowedStartMs())data.put("available_prior_range",Map.of("start_ms",window.get().allowedStartMs(),"end_ms",earliest));
+            return new ToolResult(name(),data,ids.get(0),null,null,null,ids.subList(1,ids.size()));
+        }
         var facts=context.videoQuery(control -> video.analyze(id,selectedStart,selectedEnd,focus,context.scope(),control));
         Evidence evidence=context.registerVideoEvidence(facts);
         Map<String,Object> content=json.convertValue(facts,new com.fasterxml.jackson.core.type.TypeReference<Map<String,Object>>(){});

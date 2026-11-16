@@ -18,7 +18,7 @@ POLICIES = (
     "feedback/FeedbackCompressionProperties.java",
     "memory/MemoryRecallPolicy.java", "memory/MemorySemanticPolicy.java", "memory/CompactionProperties.java", "memory/MemoryRuntimeProperties.java", "memory/MemoryPolicyProperties.java",
     "feedback/FeedbackRuntimeProperties.java", "video/VideoRuntimeProperties.java", "video/content/TranscriptQueryProperties.java", "video/content/BailianAsrProperties.java",
-    "video/VideoUnderstandingPolicy.java", "adapters/storage/StorageRuntimeProperties.java", "harness/trace/TraceDeliveryProperties.java",
+    "video/VideoUnderstandingPolicy.java", "video/VideoReusePolicy.java", "adapters/storage/StorageRuntimeProperties.java", "harness/trace/TraceDeliveryProperties.java",
     "harness/hook/HookPolicy.java",
     "runtime/OperationPolicy.java",
 )
@@ -81,6 +81,8 @@ def catalog():
                   "| 属性键 | 默认值 | 消费类 |", "|---|---:|---|"]
         if relative == "video/VideoUnderstandingPolicy.java":
             lines.append("| `agent.video.understanding.parallel` | false | VideoUnderstanding：启动生效；关闭为语音辅助视觉串行模式，开启为独立音画并行实验。切换后使用独立缓存策略，不混用两种素材。需真实模型质量和耗时对照后启用；关闭后恢复原模式及其缓存。 |")
+        if relative == "video/VideoReusePolicy.java":
+            lines.append("| `agent.video.reuse.enabled` | false | VideoAnalysisService、AnalyzeVideoContentTool：启动生效；仅CURRENT初始窗口可复用同主体、同视频版本和模型策略的完整旧片段，并处理缺失尾部；关闭恢复精确区间分析。索引仅进程内，重启丢失后正常重新分析；不共享账号、不扫描数据库JSON。 |")
         for default, name in fields:
             key = prefix + "." + re.sub(r"[A-Z]", lambda m: "-" + m[0].lower(), name)
             consumers = sorted(p.stem for p, text in sources.items() if p != path and

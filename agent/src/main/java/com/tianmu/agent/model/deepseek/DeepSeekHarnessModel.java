@@ -60,7 +60,7 @@ public final class DeepSeekHarnessModel implements ModelPort {
             if(content.contains("<｜｜DSML｜｜"))throw new IllegalArgumentException("Tool syntax in text response");
             if(!content.startsWith("{") && !content.startsWith("[")) {
                 // The host attaches only evidence actually admitted in this run; the model need not copy opaque IDs.
-                var ids=context.observations().stream().map(ToolResult::evidenceId).filter(Objects::nonNull).distinct().toList();
+                var ids=context.observations().stream().flatMap(r->r.allEvidenceIds().stream()).distinct().toList();
                 return Decision.answer(content,ids);
             }
             result=client.toolArguments(content);

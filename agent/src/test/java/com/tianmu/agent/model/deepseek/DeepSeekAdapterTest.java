@@ -115,6 +115,13 @@ class DeepSeekAdapterTest {
         }
     }
     ModelContext context() { return new ModelContext(input().query(), input().businessDate(), input().scope(), Set.of(), List.of(), List.of(), 6); }
+    @Test void plainAnswerRetainsAllMaterialEvidenceReferences(){
+        answer=request->"这里可以这样理解。";
+        var source=new ToolResult("analyze_video_content",Map.of("materials",List.of()),"first",null,null,null,List.of("second"));
+        var context=new ModelContext("解释这里",input().businessDate(),input().scope(),Set.of(),List.of(source),List.of(),6);
+        var result=new DeepSeekHarnessModel(client,properties,mapper,new PromptCatalog()).decide(context,control());
+        assertEquals(List.of("first","second"),result.answer().evidenceIds());
+    }
     @Test void creatorDraftRequestsRequireNativeToolsInsteadOfTextPreview() {
         String query="生成智能弹幕草稿"; var scope=input().scope(); var date=input().businessDate();
         var tool=new ToolDefinition("prepare_danmaku_draft","保存草稿",Map.of("type","object"));

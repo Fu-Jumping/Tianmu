@@ -113,16 +113,23 @@ public final class AgentTypes {
     public record ToolDefinition(String name, String description, Map<String, Object> inputSchema) {
         public ToolDefinition { inputSchema = ImmutablePayload.map(inputSchema); }
     }
-    public record ToolResult(String tool, Map<String, Object> data, String evidenceId, Answer terminalAnswer, PendingOperation pending, String terminalClarification) {
+    public record ToolResult(String tool, Map<String, Object> data, String evidenceId, Answer terminalAnswer, PendingOperation pending, String terminalClarification,
+            @com.fasterxml.jackson.annotation.JsonInclude(com.fasterxml.jackson.annotation.JsonInclude.Include.NON_EMPTY) List<String> additionalEvidenceIds) {
+        public ToolResult(String tool,Map<String,Object> data,String evidenceId,Answer answer,PendingOperation pending,String clarification){this(tool,data,evidenceId,answer,pending,clarification,List.of());}
         public ToolResult(String tool,Map<String,Object> data,String evidenceId,Answer answer,PendingOperation pending){this(tool,data,evidenceId,answer,pending,null);}
         public ToolResult(String tool,Map<String,Object> data,String evidenceId,Answer answer){this(tool,data,evidenceId,answer,null);}
         public ToolResult(String tool, Map<String, Object> data, String evidenceId) { this(tool, data, evidenceId, null); }
         public ToolResult {
             data = ImmutablePayload.map(data);
+            additionalEvidenceIds=additionalEvidenceIds==null?List.of():List.copyOf(additionalEvidenceIds);
+            if(additionalEvidenceIds.size()>9 || additionalEvidenceIds.stream().anyMatch(id->id==null || id.isBlank())
+                    || !additionalEvidenceIds.isEmpty() && (evidenceId==null || pending!=null || terminalClarification!=null))
+                throw new IllegalArgumentException("Invalid additional evidence references");
             if(pending!=null && (terminalAnswer!=null || evidenceId!=null || terminalClarification!=null))throw new IllegalArgumentException("Pending operation cannot claim evidence or delivery");
             if(terminalClarification!=null && (terminalClarification.isBlank() || terminalClarification.length()>2000 || terminalAnswer!=null || evidenceId!=null))throw new IllegalArgumentException("Invalid terminal clarification");
         }
-        public ToolResult withData(Map<String, Object> value) { return new ToolResult(tool, value, evidenceId, terminalAnswer, pending, terminalClarification); }
+        public ToolResult withData(Map<String, Object> value) { return new ToolResult(tool, value, evidenceId, terminalAnswer, pending, terminalClarification,additionalEvidenceIds); }
+        public List<String> allEvidenceIds(){var ids=new LinkedHashSet<String>();if(evidenceId!=null)ids.add(evidenceId);ids.addAll(additionalEvidenceIds);return List.copyOf(ids);}
     }
     public record Skill(String name, String version, String description,
                         String instructions, Set<String> tools) {

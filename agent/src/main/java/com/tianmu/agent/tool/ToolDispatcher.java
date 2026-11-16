@@ -188,7 +188,7 @@ public class ToolDispatcher {
         public void validate(ToolResult result){
             if(result==null || !result.tool().equals(call.name()) || result.pending()!=null && (!tool.parallelSubmission() || !result.pending().equals(submittedOperation)) || result.terminalAnswer()!=null || result.terminalClarification()!=null || result.data().containsKey("input_validation") || result.data().containsKey("batch_validation"))
                 throw new AgentException("INVALID_TOOL_RESULT","Parallel read cannot mutate delivery state");
-            if(result.evidenceId()!=null && !delta.snapshot().containsKey(result.evidenceId()) && !evidence.containsKey(result.evidenceId()))throw new AgentException("INVALID_EVIDENCE","Unknown branch evidence");
+            for(String id:result.allEvidenceIds())if(!delta.snapshot().containsKey(id) && !evidence.containsKey(id))throw new AgentException("INVALID_EVIDENCE","Unknown branch evidence");
         }
         public void commit(ToolResult result){
             run.checkpoint();run.verifyMemory();validate(result);
@@ -224,6 +224,7 @@ public class ToolDispatcher {
                     || result.terminalClarification()!=null && !call.name().equals("ask_clarification"))
                 throw new AgentException("INVALID_TOOL_RESULT", "Tool result does not match the registered handler or uses host-reserved feedback");
             TraceDetails.capture("output", result, "TOOL_RESULT");
+            for(String id:result.additionalEvidenceIds())context.evidence(id);
             if(result.pending()!=null && operations!=null)operations.getObject().require(result.pending().kind());
             return new Completed(result);
         } catch (IllegalArgumentException | DateTimeException | ArithmeticException e) {

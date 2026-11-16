@@ -18,7 +18,7 @@ import java.util.*;
 import java.util.function.Supplier;
 
 @Component
-@EnableConfigurationProperties(VideoModelProperties.class)
+@EnableConfigurationProperties({VideoModelProperties.class,VideoReusePolicy.class})
 public final class VideoAnalysisService {
     static final String FACT_FOCUS="提取通用画面事实：主体、场景、可见动作、构图及可见文字。按采样时间逐项记录，不围绕某个运营问题筛选，不提供建议。";
     private final VideoModelProperties config;
@@ -29,6 +29,8 @@ public final class VideoAnalysisService {
     private final VideoAnalysisFlights flights;
     private final Tracer tracer;
     private final VideoUnderstanding understanding;
+    @org.springframework.beans.factory.annotation.Autowired private RecentVideoMaterials recent=new RecentVideoMaterials();
+    @org.springframework.beans.factory.annotation.Autowired private VideoReusePolicy reuse=VideoReusePolicy.defaults();
 
     @org.springframework.beans.factory.annotation.Autowired
     public VideoAnalysisService(VideoModelProperties config, ObjectProvider<VideoContentPort> ports, VideoContentCache cache,
@@ -75,7 +77,7 @@ public final class VideoAnalysisService {
                     : "video-facts-v7:independent-av:sampled12:generic-v1",FACT_FOCUS).stream().map(VideoAnalysisService::hash).toList()));
         VideoContent.Facts prior = cached(key,source,from,to);
         TraceAttributes.apply(Span.current(),Map.of("video.cache_hit",prior != null));
-        if (prior != null) { VideoAnalysisFlights.checkpoint(control);TraceAttributes.apply(Span.current(),Map.of("video.cache_age_ms",Math.max(0,Duration.between(prior.analyzedAt(),Instant.now()).toMillis())));recordCoverage(prior);return prior; }
+        if (prior != null) { VideoAnalysisFlights.checkpoint(control);recent.remember(namespace(scope,source),key,prior);TraceAttributes.apply(Span.current(),Map.of("video.cache_age_ms",Math.max(0,Duration.between(prior.analyzedAt(),Instant.now()).toMillis())));recordCoverage(prior);return prior; }
         VideoContent.Facts result = flights.run(key, control, () -> {
             VideoContent.Facts cached = cached(key,source,from,to);
             if (cached != null) return cached;
@@ -85,7 +87,37 @@ public final class VideoAnalysisService {
         VideoContent.Source current = stage("video.source", () -> port.source(videoId, scope, control));
         if (!source.equals(current)) throw new AgentException("INVALID_EVIDENCE", "Video source changed during analysis");
         VideoAnalysisFlights.checkpoint(control);
-        recordCoverage(result);return result;
+        recent.remember(namespace(scope,source),key,result);recordCoverage(result);return result;
+    }
+    public boolean reuseEnabled(){return reuse.enabled();}
+    private String namespace(AccessScope scope,VideoContent.Source source){
+        return hash(String.join("|",List.of(scope.tenantId(),scope.userId(),Long.toString(source.videoId()),source.sourceVersion(),
+                config.baseUrl().toString(),config.provider(),config.model(),transcriptionModel(),understanding.strategy()).stream().map(VideoAnalysisService::hash).toList()));
+    }
+    /** CURRENT only: preserve the complete dependency interval of every reused clip. */
+    public List<VideoContent.Facts> analyzeCurrent(long id,long from,long to,long allowedStart,String focus,AccessScope scope,CallControl control){
+        if(!reuse.enabled())return List.of(analyze(id,from,to,focus,scope,control));
+        if(focus==null || focus.length()>500 || allowedStart<0 || allowedStart>from || to<=from || to-allowedStart>90000 || to-from>30000)
+            throw new AgentException("INVALID_ARGUMENTS","Invalid current-video reuse window");
+        VideoAnalysisFlights.checkpoint(control);
+        if(!scope.readableVideoIds().contains(id))throw new AgentException("FORBIDDEN","Video outside prepared scope");
+        var port=ports.getIfAvailable();if(port==null || !config.enabled())throw new AgentException("VIDEO_CONTENT_UNAVAILABLE","Video understanding unavailable");
+        var source=port.source(id,scope,control);VideoFactsValidator.source(source,id);
+        if(to>source.durationMs())throw new AgentException("INVALID_ARGUMENTS","Range exceeds video");
+        var prior=recent.find(namespace(scope,source),from,to,allowedStart,source,cache);
+        if(prior.isEmpty())return List.of(analyze(id,from,to,focus,scope,control));
+        var parts=new ArrayList<VideoContent.Facts>();parts.add(prior.get());
+        if(prior.get().endMs()<to){
+            // A one-second overlap retains spoken words at the join. Both original clips remain separate.
+            long tail=Math.max(from,prior.get().endMs()-1000);
+            parts.add(analyze(id,tail,to,focus,scope,control));
+        }
+        var current=port.source(id,scope,control);
+        if(!source.equals(current) || parts.stream().anyMatch(p->!p.sourceVersion().equals(source.sourceVersion())))
+            throw new AgentException("INVALID_EVIDENCE","Source changed during material reuse");
+        VideoAnalysisFlights.checkpoint(control);
+        TraceAttributes.apply(Span.current(),Map.of("video.material_reuse",true,"video.reused_duration_ms",prior.get().endMs()-from,"video.material_parts",parts.size()));
+        return List.copyOf(parts);
     }
     private static void recordCoverage(VideoContent.Facts facts){TraceAttributes.apply(Span.current(),Map.of("video.frame_count",facts.sampledAtMs().size(),"video.transcript_available",!facts.transcript().isBlank(),"video.sampled_at_ms",facts.sampledAtMs().stream().map(Object::toString).toList()));}
     private VideoContent.Facts cached(String key,VideoContent.Source source,long from,long to){
