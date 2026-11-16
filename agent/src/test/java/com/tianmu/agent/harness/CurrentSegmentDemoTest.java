@@ -22,16 +22,18 @@ class CurrentSegmentDemoTest {
         var s=resolve("解释这个视频当前播放位置附近的画面。",300000L,1799964);
         assertEquals("video.content",s.type());assertEquals(id,s.conditions().get("video_id"));
         assertEquals(270000L,s.conditions().get("start_ms"));assertEquals(300000L,s.conditions().get("end_ms"));
-        assertEquals(270000L,s.reading().videoStartMs());assertEquals("current_playback_default",s.provenance().get("start_ms"));
+        assertEquals(210000L,s.reading().videoStartMs());assertEquals("current_playback_default",s.provenance().get("start_ms"));
     }
     @Test void clipsAtVideoEdgesAndPreservesExplicitBounds() {
         for(String text:List.of("请解释当前播放位置附近黑板上的例题。","解释一下这里","讲讲这个视频当前播放位置的内容，帮我理解。"))
             assertEquals(270000L,resolve(text,300000L,1799964).conditions().get("start_ms"));
         assertEquals("AMBIGUOUS_ANALYSIS_SOURCES",assertThrows(AgentException.class,()->resolve("解释当前片段的画面",0L,1799964)).code());
         assertEquals(0L,resolve("解释当前片段的画面",1000L,1799964).conditions().get("start_ms"));
+        assertEquals(0L,resolve("解释当前片段的画面",1000L,1799964).reading().videoStartMs());
         assertEquals(1799000L,resolve("解释当前片段的画面",1799000L,1799964).conditions().get("end_ms"));
         var explicit=resolve("解释这个视频当前片段的画面，05:00到05:30",600000L,1799964);
         assertEquals(300000L,explicit.conditions().get("start_ms"));assertEquals(330000L,explicit.conditions().get("end_ms"));
+        assertEquals(300000L,explicit.reading().videoStartMs());
     }
     @Test void missingPlaybackRequiresSpecificClarificationAndGeneralKnowledgeStaysGeneral() {
         var e=assertThrows(AgentException.class,()->resolve("解释当前片段的画面",null,1799964));

@@ -26,7 +26,13 @@ final class VideoFactsValidator {
     }
 
     static VideoContent.Facts facts(VideoContent.Media media, JsonNode response, String transcript, String model) {
+        return facts(media, response, transcript, model, null);
+    }
+    static VideoContent.Facts facts(VideoContent.Media media, JsonNode response, String transcript, String model,
+                                   com.tianmu.agent.video.content.TimedTranscript timed) {
         try {
+            if (timed != null && (timed.clipStartMs() != media.startMs() || timed.clipEndMs() != media.endMs()
+                    || !timed.rawText().equals(transcript))) throw new IllegalArgumentException();
             if (response == null || !response.path("summary").isTextual() || !response.path("moments").isArray()) throw new IllegalArgumentException();
             var moments = new ArrayList<VideoContent.Moment>();
             for (JsonNode moment : response.path("moments")) {
@@ -36,7 +42,9 @@ final class VideoFactsValidator {
             }
             return new VideoContent.Facts("video-content-v1", media.source().videoId(), media.source().sourceVersion(), media.startMs(), media.endMs(),
                     response.path("summary").textValue(), moments, transcript, transcript.isBlank() ? "SAMPLED_FRAMES" : "SAMPLED_FRAMES_AND_AUDIO_TRANSCRIPT",
-                    media.frames().stream().map(VideoContent.Frame::atMs).toList(), model, Instant.now());
+                    media.frames().stream().map(VideoContent.Frame::atMs).toList(), model, Instant.now(),
+                    timed == null ? null : timed.precision().name(), timed == null ? null : timed.segments().stream()
+                    .map(s -> new VideoContent.TranscriptSegment(s.startMs(), s.endMs(), s.text())).toList());
         } catch (IllegalArgumentException e) {
             throw new AgentException("INVALID_VIDEO_ANALYSIS", "Vision response must cite provided frame timestamps and bounded text");
         }

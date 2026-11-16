@@ -58,10 +58,10 @@ public final class VideoAnalysisService {
         long from = start == null ? 0 : start, to = end == null ? source.durationMs() : end;
         if (from < 0 || to <= from || to > source.durationMs() || start != null && to-from > 120_000)
             throw new AgentException("INVALID_ARGUMENTS", "Explicit intervals must be inside the video and at most 120 seconds");
-        TraceAttributes.apply(Span.current(),Map.of("video.id",videoId,"video.source_version",source.sourceVersion(),"video.start_ms",from,"video.end_ms",to,"video.fact_strategy","generic_v5"));
+        TraceAttributes.apply(Span.current(),Map.of("video.id",videoId,"video.source_version",source.sourceVersion(),"video.start_ms",from,"video.end_ms",to,"video.fact_strategy","generic_v6_timed"));
         String key = hash(String.join("|", List.of(scope.tenantId(), scope.userId(), Long.toString(videoId), source.sourceVersion(),
                 Long.toString(from), Long.toString(to), config.baseUrl().toString(), config.provider(), config.model(),
-                transcriptionModel(), "video-facts-v5:sampled12:generic-v1",FACT_FOCUS).stream().map(VideoAnalysisService::hash).toList()));
+                transcriptionModel(), "video-facts-v6:timed-transcript:sampled12:generic-v1",FACT_FOCUS).stream().map(VideoAnalysisService::hash).toList()));
         VideoContent.Facts prior = cached(key,source,from,to);
         TraceAttributes.apply(Span.current(),Map.of("video.cache_hit",prior != null));
         if (prior != null) { VideoAnalysisFlights.checkpoint(control);TraceAttributes.apply(Span.current(),Map.of("video.cache_age_ms",Math.max(0,Duration.between(prior.analyzedAt(),Instant.now()).toMillis())));recordCoverage(prior);return prior; }
@@ -89,12 +89,12 @@ public final class VideoAnalysisService {
             return port.media(videoId,source.sourceVersion(),from,to,scope,control);
         });
         VideoFactsValidator.media(source, media, from, to);
-        String transcript = "";
+        com.tianmu.agent.video.content.TimedTranscript timed = null;
         if (!transcriptionModel().isBlank() && media.audioBase64()!=null && !media.audioBase64().isBlank())
-            transcript = stage("video.model.transcription", () -> transcription.transcribeTimed(media.audioBase64(),from,to,control).rawText());
-        String speech = transcript;
+            timed = stage("video.model.transcription", () -> transcription.transcribeTimed(media.audioBase64(),from,to,control));
+        String speech = timed == null ? "" : timed.rawText();
         JsonNode response = stage("video.model.vision", () -> vision.understand(media,focus,speech,control));
-        var facts = VideoFactsValidator.facts(media, response, transcript, config.model());
+        var facts = VideoFactsValidator.facts(media, response, speech, config.model(), timed);
         VideoAnalysisFlights.checkpoint(control); cache.put(key, facts); return facts;
     }
     private String transcriptionModel(){String selected=transcription.modelName();return selected==null || selected.isBlank()?config.transcriptionModel():selected;}

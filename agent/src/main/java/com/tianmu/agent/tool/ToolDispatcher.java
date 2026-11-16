@@ -160,6 +160,7 @@ public class ToolDispatcher {
                 public Evidence registerDanmakuEvidence(com.tianmu.agent.core.DanmakuTypes.Dataset d){return business.registerDanmakuEvidence(policy,d);}
                 public void checkVideoQuery(long id){business.checkVideoQuery(policy,id);}
                 public void checkVideoQuery(long id,Long a,Long b){business.checkVideoQuery(policy,id,a,b);}
+                public Optional<com.tianmu.agent.application.CurrentVideoWindow> currentVideoWindow(){return task==null?Optional.empty():com.tianmu.agent.application.CurrentVideoWindow.from(task.specification());}
                 public Evidence registerVideoEvidence(VideoContent.Facts f){return business.registerVideoEvidence(policy,f);}
                 public <T>T query(Function<CallControl,T> operation){return harness.toolCall(run,operation);}
                 public <T>T videoQuery(Function<CallControl,T> operation){return harness.videoToolCall(run,operation);}
@@ -422,6 +423,7 @@ public class ToolDispatcher {
                 throw new com.tianmu.agent.core.AgentException("TASK_CONSTRAINT_VIOLATION", "草稿对象或类型与用户请求不一致。");
         }
         public void checkVideoQuery(long videoId, Long startMs, Long endMs) { business.checkVideoQuery(run, videoId, startMs, endMs); }
+        public Optional<com.tianmu.agent.application.CurrentVideoWindow> currentVideoWindow(){return run.task()==null?Optional.empty():com.tianmu.agent.application.CurrentVideoWindow.from(run.task().specification());}
         public com.tianmu.agent.core.TranscriptContent.Context transcriptContext(){
             if(run.task()==null || !(run.task().specification().typed() instanceof com.tianmu.agent.core.TaskConditions.Transcript t))throw new AgentException("TASK_CONSTRAINT_VIOLATION","Frozen transcript task required");
             return t.context();

@@ -38,6 +38,7 @@ public interface ToolContext {
     default void checkFeedback(com.tianmu.agent.core.FeedbackAnalysis.Request request){throw new com.tianmu.agent.core.AgentException("TOOL_CAPABILITY_DENIED","Feedback analysis is not available");}
     default void checkFeedbackTopic(Evidence evidence,String topic){throw new com.tianmu.agent.core.AgentException("TOOL_CAPABILITY_DENIED","Feedback topic is not available");}
     default com.tianmu.agent.core.AnalysisContract analysisContract(){return null;}
+    default Optional<com.tianmu.agent.application.CurrentVideoWindow> currentVideoWindow(){return Optional.empty();}
     default com.tianmu.agent.core.TranscriptContent.Context transcriptContext(){throw new com.tianmu.agent.core.AgentException("TOOL_CAPABILITY_DENIED","Transcript task required");}
     default Evidence registerTranscriptEvidence(com.tianmu.agent.core.TranscriptContent.Facts facts){throw new com.tianmu.agent.core.AgentException("TOOL_CAPABILITY_DENIED","Transcript evidence unavailable");}
     Evidence registerEvidence(MetricData data);

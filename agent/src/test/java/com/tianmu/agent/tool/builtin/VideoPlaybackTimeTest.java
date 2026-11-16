@@ -26,4 +26,16 @@ class VideoPlaybackTimeTest {
         assertEquals(270000L,((Number)analysis.get("startMs")).longValue());
         assertEquals(300000L,((Number)analysis.get("endMs")).longValue());
     }
+    @Test void missingBoundsUseFrozenInitialWindowRatherThanEntireVideo() {
+        var facts=new com.tianmu.agent.core.VideoContent.Facts("video-content-v1",123,"v1",270000,300000,"板书",
+                java.util.List.of(),"","SAMPLED_FRAMES",java.util.List.of(271250L),"model",java.time.Instant.now());
+        var context=mock(com.tianmu.agent.tool.ToolContext.class);
+        when(context.currentVideoWindow()).thenReturn(java.util.Optional.of(new com.tianmu.agent.application.CurrentVideoWindow(123,270000,300000,210000)));
+        when(context.videoQuery(any())).thenReturn(facts);
+        when(context.registerVideoEvidence(facts)).thenReturn(new com.tianmu.agent.core.AgentTypes.Evidence("ev1",java.util.UUID.randomUUID(),null,null,null,facts));
+        var tool=new AnalyzeVideoContentTool(null,new com.fasterxml.jackson.databind.ObjectMapper().findAndRegisterModules());
+        var result=tool.execute(new com.tianmu.agent.core.AgentTypes.ToolCall("analyze_video_content",java.util.Map.of("video_id",123)),context);
+        verify(context).checkVideoQuery(123,270000L,300000L);
+        assertEquals(java.util.Map.of("start_ms",210000L,"end_ms",270000L),result.data().get("available_prior_range"));
+    }
 }

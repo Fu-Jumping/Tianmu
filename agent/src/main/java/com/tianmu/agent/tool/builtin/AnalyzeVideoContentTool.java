@@ -19,13 +19,21 @@ public final class AnalyzeVideoContentTool implements AgentTool {
         long id=ToolArguments.integer(call,"video_id");
         Long start=call.arguments().containsKey("start_ms")?ToolArguments.integer(call,"start_ms"):null;
         Long end=call.arguments().containsKey("end_ms")?ToolArguments.integer(call,"end_ms"):null;
-        context.checkVideoQuery(id,start,end);
+        var window=context.currentVideoWindow();
+        if(start==null && end==null && window.isPresent()) { start=window.get().initialStartMs(); end=window.get().endMs(); }
+        final Long selectedStart=start, selectedEnd=end;
+        context.checkVideoQuery(id,selectedStart,selectedEnd);
         String focus=call.arguments().containsKey("focus")?ToolArguments.text(call,"focus"):"";
-        var facts=context.videoQuery(control -> video.analyze(id,start,end,focus,context.scope(),control));
+        var facts=context.videoQuery(control -> video.analyze(id,selectedStart,selectedEnd,focus,context.scope(),control));
         Evidence evidence=context.registerVideoEvidence(facts);
         Map<String,Object> content=json.convertValue(facts,new com.fasterxml.jackson.core.type.TypeReference<Map<String,Object>>(){});
         var playback=Map.of("start",playbackTime(facts.startMs()),"end",playbackTime(facts.endMs()));
-        return new ToolResult(name(),Map.of("analysis",content,"playback_range",playback,"evidence_id",evidence.id(),"question",focus,"limitations","Generic sampled-frame facts are reused across questions. Answer the question using these facts; do not infer unseen details. Playback time is distinct from creation time. If stating the analyzed range, copy playback_range exactly; do not convert millisecond values yourself. Sample timestamps are not exact event times."),evidence.id());
+        var result = new java.util.LinkedHashMap<String,Object>();
+        result.put("analysis",content); result.put("playback_range",playback); result.put("evidence_id",evidence.id());
+        result.put("question",focus); result.put("limitations","Generic sampled-frame facts are reused across questions. Answer the question using these facts; do not infer unseen details. Playback time is distinct from creation time. If stating the analyzed range, copy playback_range exactly; do not convert millisecond values yourself. Sample timestamps are not exact event times.");
+        if (window.isPresent() && window.get().videoId()==id && facts.startMs()>window.get().allowedStartMs())
+            result.put("available_prior_range", Map.of("start_ms",window.get().allowedStartMs(),"end_ms",facts.startMs()));
+        return new ToolResult(name(),result,evidence.id());
     }
     static String playbackTime(long milliseconds) {
         if(milliseconds<0)throw new IllegalArgumentException("Invalid playback time");

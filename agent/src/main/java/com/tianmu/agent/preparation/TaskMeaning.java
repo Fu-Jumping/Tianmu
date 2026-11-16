@@ -107,7 +107,8 @@ public class TaskMeaning {
         var values=new LinkedHashMap<String,Object>(spec.conditions());values.put("start_ms",start);values.put("end_ms",end);
         var provenance=new HashMap<String,String>(spec.provenance());provenance.put("start_ms","current_playback_default");provenance.put("end_ms","current_playback_default");
         var reading=spec.reading();
-        return new Specification(spec.type(),values,provenance,new com.tianmu.agent.core.AnalysisContract(reading.sources(),reading.reportRequired(),start,end,reading.forceReanalysis()));
+        long allowedStart=Math.max(0,end-90_000);
+        return new Specification(spec.type(),values,provenance,new com.tianmu.agent.core.AnalysisContract(reading.sources(),reading.reportRequired(),allowedStart,end,reading.forceReanalysis()));
     }
     public Specification resolve(String text,LocalDate date,java.time.Instant at,com.tianmu.agent.core.RequestContext page) {
         String parsing=page!=null && VideoDiscovery.request(text,date).isPresent()?VideoDiscovery.analysisText(text):text;

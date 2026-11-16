@@ -43,7 +43,11 @@ public final class BusinessEvidencePolicy {
             if (run.task() == null) return;
             var expected = run.task().specification().typed();
             if (expected instanceof TaskConditions.Interaction interaction) interaction.video().check(videoId, startMs, endMs);
-            if (expected instanceof TaskConditions.Video video) video.check(videoId, startMs, endMs);
+            if (expected instanceof TaskConditions.Video video) {
+                var current=CurrentVideoWindow.from(run.task().specification());
+                if(current.isPresent()) current.get().check(videoId,startMs,endMs);
+                else video.check(videoId, startMs, endMs);
+            }
             var contract=run.task().specification().analysis();
             if(contract!=null && contract.videoStartMs()!=null)
                 new TaskConditions.Video(videoId,contract.videoStartMs(),contract.videoEndMs()).check(videoId,startMs,endMs);
