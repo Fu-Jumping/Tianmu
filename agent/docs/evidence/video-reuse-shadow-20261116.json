@@ -1,0 +1,85 @@
+{
+  "date": "2026-11-16",
+  "implementation": "bc160a5",
+  "scope": "Production-host shadow material preparation using frozen local course fixtures; final answer generation and live source authorization are not measured. Serving container was not restarted or replaced.",
+  "inputSha256": "4e89a6f86de653380463a022772a709e1ad38bfe7595c01b7c61ec31d5858f15",
+  "existingMaterial": [
+    275973,
+    305973
+  ],
+  "requested": [
+    280973,
+    310973
+  ],
+  "tailWithOverlap": [
+    304973,
+    310973
+  ],
+  "samples": [
+    {
+      "reuse": false,
+      "status": "FAILED",
+      "elapsedMs": 39142,
+      "extractedRanges": [
+        [
+          280973,
+          310973
+        ]
+      ],
+      "errorType": "AgentException",
+      "errorCode": "INVALID_VIDEO_ANALYSIS",
+      "round": 1
+    },
+    {
+      "reuse": true,
+      "status": "SUCCEEDED",
+      "elapsedMs": 14013,
+      "extractedRanges": [
+        [
+          304973,
+          310973
+        ]
+      ],
+      "round": 1
+    },
+    {
+      "reuse": false,
+      "status": "SUCCEEDED",
+      "elapsedMs": 15112,
+      "extractedRanges": [
+        [
+          280973,
+          310973
+        ]
+      ],
+      "round": 2
+    },
+    {
+      "reuse": true,
+      "status": "SUCCEEDED",
+      "elapsedMs": 42978,
+      "extractedRanges": [
+        [
+          304973,
+          310973
+        ]
+      ],
+      "round": 2
+    }
+  ],
+  "decision": "KEEP_REUSE_DISABLED",
+  "localVerification": {
+    "targetedTests": 115,
+    "failures": 0,
+    "errors": 0,
+    "governance": "PASS"
+  },
+  "findings": [
+    "Reuse correctly requested only 6000ms of fresh media instead of 30000ms, retaining two original source records.",
+    "Observed latency improvement was not stable. The successful second-round full request was 15112ms, versus 42978ms for reuse.",
+    "The first-round full request failed INVALID_VIDEO_ANALYSIS; its 39142ms duration must not be presented as a successful baseline.",
+    "Model-call audio and visual durations were not separately instrumented in this runner; the source of the slow reuse sample is not established.",
+    "Warm preparation of the old clip is excluded from subsequent-request timings.",
+    "No statistically meaningful P90, provider-cache analysis, monetary-cost comparison or final-answer quality acceptance was performed."
+  ]
+}
