@@ -1,0 +1,14 @@
+{
+  "date": "2026-11-16",
+  "revision": "13d3018",
+  "jarSha256": "3cb4b0436f240cd9384212fcc010514b7ca1e76f341eac6c29ecb2ec9e9e0a81",
+  "scope": "Synchronous authorized current-clip ASR plus sampled-frame understanding",
+  "configuration": {"agent.video.asr.enabled": true, "agent.video.asr.region": "beijing", "agent.video.asr.timeout-millis": 60000},
+  "tests": {"relatedPassed": 27, "configurationContextPassed": 1, "independentReview": "No confirmed P0/P1 in synchronous integration"},
+  "scenarios": [
+    {"name": "mapping-cold", "runId": "5632ee46-5b0b-4a50-9eed-ac92827459b2", "traceId": "b1643bf69bb2484ea0f16b3aa9ccbbe0", "rangeMs": [270000,300000], "cacheHit": false, "audioAvailable": true, "status": "SUCCEEDED", "elapsedSeconds":32.8, "asrSeconds":4.604, "visionSeconds":11.393},
+    {"name": "floor-cold", "runId": "2f8ab819-54a0-44dc-9302-5aa5e400885d", "traceId": "cc2216529e1b485ac8bfde63a62d3bf1", "rangeMs": [570000,600000], "cacheHit": false, "audioAvailable": true, "status": "SUCCEEDED", "elapsedSeconds":34.7, "asrSeconds":4.786, "visionSeconds":17.646},
+    {"name": "mapping-cache", "runId": "dab48466-3891-40f5-8eff-bb8120ab030a", "traceId": "f5218ede6354393fee3bf0ad37524dd0", "rangeMs": [270000,300000], "cacheHit": true, "audioAvailable": true, "status": "SUCCEEDED", "elapsedSeconds":10.2, "newAsrOrVisionCall": false, "note":"Two evidence-tool reads occurred within the same run; both used cache."}
+  ],
+  "limitations": ["First response synchronously waits for ASR and vision", "Whole-video ranges beyond 120 seconds do not have full audio coverage", "No shared background-transcript task or player-source-version binding is enabled by this release", "Recognition errors and generated explanations still require quality evaluation; these two examples are not a mathematical-accuracy benchmark"]
+}
