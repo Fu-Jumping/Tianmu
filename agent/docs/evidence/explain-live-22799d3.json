@@ -1,0 +1,33 @@
+{
+  "date": "2026-11-16",
+  "deployedRevision": "22799d3982f0a387efce2049dbbb3f1a0435761f",
+  "agentJarSha256": "34b4b6ae0c346d269946a184713ec3da6eade5b56f1341a033188bbb1f501675",
+  "readiness": "UP",
+  "localVerification": "Targeted video-window, evidence, transcript, rendering boundary and governance tests passed from a clean worktree.",
+  "runs": [
+    {
+      "runId": "b254f4b3-5edf-49ec-93b2-b039ee470e97",
+      "traceId": "61b239996ddf7ce7480bd26f2504c998",
+      "question": "讲懂这里，05:00",
+      "status": "SUCCEEDED",
+      "elapsedSeconds": 69.5,
+      "cacheHit": false,
+      "analyzedRanges": [[270000, 300000], [210000, 270000]],
+      "transcriptionAndVision": true,
+      "qualityIssues": ["The answer attributes the English domain explanation to the teacher although the retrieved transcript ends at the teacher's question.", "Cold request latency was approximately 70 seconds.", "The answer is long and the shortcut did not yet meet the desired user experience."]
+    },
+    {
+      "runId": "94f2fd57-343c-4568-9950-fcf2361df165",
+      "traceId": "a7c5391f596afb7fbfbf22eb8bf99274",
+      "question": "原像和像有什么区别，05:00",
+      "status": "SUCCEEDED",
+      "elapsedSeconds": 14.4,
+      "cacheHit": true,
+      "analyzedRanges": [[270000, 300000], [210000, 270000]],
+      "qualityIssues": ["The response includes additional material that does not directly answer the user's question."]
+    }
+  ],
+  "browserReplay": {"widths": [1440, 390], "answerRendered": true, "markdownEmphasisRendered": true, "horizontalOverflow": false},
+  "productAcceptance": "NOT_PASSED",
+  "remaining": ["Semantic answer verification is not implemented.", "Source-bound multi-turn context and media identity safeguards remain incomplete.", "No full human-labelled evaluation set or statistically meaningful latency measurement was performed."]
+}
