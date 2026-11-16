@@ -28,12 +28,19 @@ public final class VideoAnalysisService {
     private final TranscriptionPort transcription;
     private final VideoAnalysisFlights flights;
     private final Tracer tracer;
+    private final VideoUnderstanding understanding;
 
     @org.springframework.beans.factory.annotation.Autowired
     public VideoAnalysisService(VideoModelProperties config, ObjectProvider<VideoContentPort> ports, VideoContentCache cache,
-                                Tracer tracer, VisionModelPort vision, TranscriptionPort transcription, VideoAnalysisFlights flights) {
+                                Tracer tracer, VisionModelPort vision, TranscriptionPort transcription, VideoAnalysisFlights flights,
+                                VideoUnderstanding understanding) {
         this.config = config; this.ports = ports; this.cache = cache; this.tracer = tracer;
         this.vision = vision; this.transcription = transcription; this.flights = flights;
+        this.understanding = understanding;
+    }
+    public VideoAnalysisService(VideoModelProperties config, ObjectProvider<VideoContentPort> ports, VideoContentCache cache,
+                                Tracer tracer, VisionModelPort vision, TranscriptionPort transcription, VideoAnalysisFlights flights) {
+        this(config,ports,cache,tracer,vision,transcription,flights,new VideoUnderstanding(VideoUnderstandingPolicy.defaults()));
     }
     VideoAnalysisService(VideoModelProperties config, ObjectProvider<VideoContentPort> ports, VideoContentCache cache, ObjectMapper json, Tracer tracer, HttpClient http) {
         this(config, ports, cache, tracer, new VideoModelClient(config, json, http));
@@ -58,10 +65,14 @@ public final class VideoAnalysisService {
         long from = start == null ? 0 : start, to = end == null ? source.durationMs() : end;
         if (from < 0 || to <= from || to > source.durationMs() || start != null && to-from > 120_000)
             throw new AgentException("INVALID_ARGUMENTS", "Explicit intervals must be inside the video and at most 120 seconds");
-        TraceAttributes.apply(Span.current(),Map.of("video.id",videoId,"video.source_version",source.sourceVersion(),"video.start_ms",from,"video.end_ms",to,"video.fact_strategy","generic_v6_timed"));
+        TraceAttributes.apply(Span.current(),Map.of("video.id",videoId,"video.source_version",source.sourceVersion(),"video.start_ms",from,"video.end_ms",to,"video.fact_strategy",
+                understanding.strategy().equals("speech-assisted-vision-v1")?"generic_v6_timed":"generic_v7_independent_av"));
+        TraceAttributes.apply(Span.current(),Map.of("video.understanding_strategy",understanding.strategy()));
         String key = hash(String.join("|", List.of(scope.tenantId(), scope.userId(), Long.toString(videoId), source.sourceVersion(),
                 Long.toString(from), Long.toString(to), config.baseUrl().toString(), config.provider(), config.model(),
-                transcriptionModel(), "video-facts-v6:timed-transcript:sampled12:generic-v1",FACT_FOCUS).stream().map(VideoAnalysisService::hash).toList()));
+                transcriptionModel(), understanding.strategy().equals("speech-assisted-vision-v1")
+                    ? "video-facts-v6:timed-transcript:sampled12:generic-v1"
+                    : "video-facts-v7:independent-av:sampled12:generic-v1",FACT_FOCUS).stream().map(VideoAnalysisService::hash).toList()));
         VideoContent.Facts prior = cached(key,source,from,to);
         TraceAttributes.apply(Span.current(),Map.of("video.cache_hit",prior != null));
         if (prior != null) { VideoAnalysisFlights.checkpoint(control);TraceAttributes.apply(Span.current(),Map.of("video.cache_age_ms",Math.max(0,Duration.between(prior.analyzedAt(),Instant.now()).toMillis())));recordCoverage(prior);return prior; }
@@ -89,11 +100,13 @@ public final class VideoAnalysisService {
             return port.media(videoId,source.sourceVersion(),from,to,scope,control);
         });
         VideoFactsValidator.media(source, media, from, to);
-        com.tianmu.agent.video.content.TimedTranscript timed = null;
-        if (!transcriptionModel().isBlank() && media.audioBase64()!=null && !media.audioBase64().isBlank())
-            timed = stage("video.model.transcription", () -> transcription.transcribeTimed(media.audioBase64(),from,to,control));
+        var result=understanding.understand(control,
+            audioControl -> !transcriptionModel().isBlank() && media.audioBase64()!=null && !media.audioBase64().isBlank()
+                ? stage("video.model.transcription", () -> transcription.transcribeTimed(media.audioBase64(),from,to,audioControl)) : null,
+            (speech,visualControl) -> stage("video.model.vision", () -> vision.understand(media,focus,speech,visualControl)));
+        var timed=result.transcript();
         String speech = timed == null ? "" : timed.rawText();
-        JsonNode response = stage("video.model.vision", () -> vision.understand(media,focus,speech,control));
+        JsonNode response = result.visual();
         var facts = VideoFactsValidator.facts(media, response, speech, config.model(), timed);
         VideoAnalysisFlights.checkpoint(control); cache.put(key, facts); return facts;
     }

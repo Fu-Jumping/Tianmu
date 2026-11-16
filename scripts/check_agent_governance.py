@@ -18,7 +18,7 @@ POLICIES = (
     "feedback/FeedbackCompressionProperties.java",
     "memory/MemoryRecallPolicy.java", "memory/MemorySemanticPolicy.java", "memory/CompactionProperties.java", "memory/MemoryRuntimeProperties.java", "memory/MemoryPolicyProperties.java",
     "feedback/FeedbackRuntimeProperties.java", "video/VideoRuntimeProperties.java", "video/content/TranscriptQueryProperties.java", "video/content/BailianAsrProperties.java",
-    "adapters/storage/StorageRuntimeProperties.java", "harness/trace/TraceDeliveryProperties.java",
+    "video/VideoUnderstandingPolicy.java", "adapters/storage/StorageRuntimeProperties.java", "harness/trace/TraceDeliveryProperties.java",
     "harness/hook/HookPolicy.java",
     "runtime/OperationPolicy.java",
 )
@@ -79,6 +79,8 @@ def catalog():
         fields = re.findall(r'@DefaultValue\("([^"\n]+)"\)\s+(?:int|double)\s+(\w+)', source)
         lines += [f"## {prefix}", "", f"声明与完整校验：[源码](../src/main/java/com/tianmu/agent/{relative})。", "",
                   "| 属性键 | 默认值 | 消费类 |", "|---|---:|---|"]
+        if relative == "video/VideoUnderstandingPolicy.java":
+            lines.append("| `agent.video.understanding.parallel` | false | VideoUnderstanding：启动生效；关闭为语音辅助视觉串行模式，开启为独立音画并行实验。切换后使用独立缓存策略，不混用两种素材。需真实模型质量和耗时对照后启用；关闭后恢复原模式及其缓存。 |")
         for default, name in fields:
             key = prefix + "." + re.sub(r"[A-Z]", lambda m: "-" + m[0].lower(), name)
             consumers = sorted(p.stem for p, text in sources.items() if p != path and

@@ -21,6 +21,28 @@ import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.*;
 
 class VideoAnalysisServiceTest {
+    @Test void parallelExperimentHasSeparateCacheAndDefaultKeepsSpeechAssistance() {
+        var beans=new StaticListableBeanFactory();
+        beans.addBean("video",new VideoContentPort(){
+            public VideoContent.Source source(long id,AccessScope scope,CallControl c){return new VideoContent.Source(id,VERSION,1000);}
+            public VideoContent.Media media(long id,String v,long start,long end,AccessScope scope,CallControl c){return new VideoContent.Media(new VideoContent.Source(id,v,1000),start,end,List.of(new VideoContent.Frame(500,"/9j/")),"audio");}
+        });
+        var cache=new VideoContentCache(beans.getBeanProvider(javax.sql.DataSource.class),JSON);
+        var vision=mock(VisionModelPort.class);var audio=mock(TranscriptionPort.class);
+        when(audio.transcribeTimed(anyString(),eq(0L),eq(1000L),any())).thenReturn(new com.tianmu.agent.video.content.TimedTranscript(0,1000,"口述",com.tianmu.agent.video.content.TimedTranscript.State.AVAILABLE,com.tianmu.agent.video.content.TimedTranscript.Precision.CLIP,List.of(new com.tianmu.agent.video.content.TimedTranscript.Segment(0,1000,"口述"))));
+        when(vision.understand(any(),anyString(),anyString(),any())).thenReturn(JSON.createObjectNode().put("summary","板书").set("moments",JSON.createArrayNode()));
+        var config=new VideoModelProperties(true,"compatible",URI.create("https://vision.example"),"key","vision","asr");
+        var serial=new VideoAnalysisService(config,beans.getBeanProvider(VideoContentPort.class),cache,OpenTelemetry.noop().getTracer("test"),vision,audio,new VideoAnalysisFlights());
+        serial.analyze(7,0L,1000L,"",owner("1"),control());
+        try(var pipeline=new VideoUnderstanding(new VideoUnderstandingPolicy(true,2))){
+            var parallel=new VideoAnalysisService(config,beans.getBeanProvider(VideoContentPort.class),cache,OpenTelemetry.noop().getTracer("test"),vision,audio,new VideoAnalysisFlights(),pipeline);
+            parallel.analyze(7,0L,1000L,"",owner("1"),control());
+        }
+        serial.analyze(7,0L,1000L,"",owner("1"),control());
+        verify(vision,times(1)).understand(any(),anyString(),eq("口述"),any());
+        verify(vision,times(1)).understand(any(),anyString(),eq(""),any());
+        verify(audio,times(2)).transcribeTimed(anyString(),eq(0L),eq(1000L),any());
+    }
     @Test void independentAsrReceivesExactClipAndFeedsVisionEvenWithLegacyModelUnset() {
         var beans=new StaticListableBeanFactory();var port=mock(VideoContentPort.class);beans.addBean("video",port);
         var source=new VideoContent.Source(7,VERSION,300000);
