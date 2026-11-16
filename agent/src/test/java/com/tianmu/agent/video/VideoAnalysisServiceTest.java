@@ -21,6 +21,20 @@ import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.*;
 
 class VideoAnalysisServiceTest {
+    @Test void independentAsrReceivesExactClipAndFeedsVisionEvenWithLegacyModelUnset() {
+        var beans=new StaticListableBeanFactory();var port=mock(VideoContentPort.class);beans.addBean("video",port);
+        var source=new VideoContent.Source(7,VERSION,300000);
+        when(port.source(anyLong(),any(),any())).thenReturn(source);
+        when(port.media(anyLong(),anyString(),anyLong(),anyLong(),any(),any())).thenReturn(new VideoContent.Media(source,270000,300000,List.of(new VideoContent.Frame(280000,"jpeg")),"wav"));
+        var asr=mock(TranscriptionPort.class);when(asr.modelName()).thenReturn("qwen-audio-3.0-asr-flash");
+        when(asr.transcribeTimed(eq("wav"),eq(270000L),eq(300000L),any())).thenReturn(new com.tianmu.agent.video.content.TimedTranscript(270000,300000,"定义域",com.tianmu.agent.video.content.TimedTranscript.State.AVAILABLE,com.tianmu.agent.video.content.TimedTranscript.Precision.CLIP,List.of(new com.tianmu.agent.video.content.TimedTranscript.Segment(270000,300000,"定义域"))));
+        var vision=mock(VisionModelPort.class);
+        when(vision.understand(any(),anyString(),eq("定义域"),any())).thenReturn(JSON.createObjectNode().put("summary","板书").set("moments",JSON.createArrayNode()));
+        var service=new VideoAnalysisService(new VideoModelProperties(true,"compatible",URI.create("https://vision.example"),"test-key","vision",""),beans.getBeanProvider(VideoContentPort.class),new VideoContentCache(beans.getBeanProvider(javax.sql.DataSource.class),JSON),OpenTelemetry.noop().getTracer("test"),vision,asr,new VideoAnalysisFlights());
+        var facts=service.analyze(7,270000L,300000L,"说明",owner("viewer"),control());
+        assertEquals("定义域",facts.transcript());verify(asr).transcribeTimed(eq("wav"),eq(270000L),eq(300000L),any());
+        verify(vision).understand(any(),anyString(),eq("定义域"),any());
+    }
     private static final String VERSION="a".repeat(64);
     private static final ObjectMapper JSON=new ObjectMapper().findAndRegisterModules();
     private static CallControl control() { return new CallControl(Instant.now().plusSeconds(10),new CancellationToken()); }

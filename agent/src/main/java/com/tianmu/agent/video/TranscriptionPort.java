@@ -3,6 +3,7 @@ package com.tianmu.agent.video;
 import com.tianmu.agent.runtime.control.CallControl;
 
 public interface TranscriptionPort {
+    default String modelName(){return "";}
     String transcribe(String audioBase64, CallControl control);
 
     /** Legacy providers expose clip coverage only; never fabricate sentence timestamps. */
