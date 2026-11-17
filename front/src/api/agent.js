@@ -87,6 +87,19 @@ function runPath(id) {
   return `/api/agent/runs/${id}`
 }
 
+export async function videoNotes(videoId, action = 'status', data = {}, signal) {
+  if (typeof videoId !== 'string' || !/^[1-9]\d{0,18}$/.test(videoId)) throw new Error('视频 ID 无效')
+  const base = `/api/agent/videos/${videoId}/notes`
+  if (action === 'status') return (await request(base, { signal })).json()
+  if (action === 'create') return (await request(base, { method: 'POST', signal,
+    headers: { 'Content-Type': 'application/json', 'Idempotency-Key': data.key },
+    body: JSON.stringify({ sourceVersion: data.sourceVersion }) })).json()
+  if (!/^[a-f0-9-]{36}$/.test(data.jobId || '')) throw new Error('笔记任务无效')
+  if (action === 'retry') return (await request(`${base}/${data.jobId}/retry`, { method: 'POST', signal })).json()
+  if (action === 'document') return (await request(`${base}/${data.jobId}/document`, { signal })).json()
+  throw new Error('操作无效')
+}
+
 export async function memoryRequest(path = '', options = {}) {
   const routes = /^\/(?:memories(?:\/[a-f0-9-]{36}|\/reset)?|memory-settings(?:\/automatic)?|memory-topics|runs\/[a-f0-9-]{36}\/memory(?:-jobs(?:\/[a-f0-9-]{36}\/retry)?)?)(?:\?[^#]*)?$/
   if (!routes.test(path)) throw new Error('无效的记忆接口')

@@ -97,6 +97,12 @@ public final class DeepSeekClient {
     public JsonNode completeFeedbackDirect(String model,List<? extends Map<String,?>> messages,CallControl control) {
         return complete(model,messages,2048,control,true,null,null,true,65536);
     }
+    /** Bounded structured background operation; no replayable HTTP body or implicit retry. */
+    public JsonNode completeStructuredOnce(String model,List<? extends Map<String,?>> messages,int maxTokens,int maxInputBytes,CallControl control) {
+        if(maxTokens<128 || maxTokens>16384 || maxInputBytes<1024 || maxInputBytes>1048576)
+            throw new IllegalArgumentException("Invalid structured model limits");
+        return complete(model,messages,maxTokens,control,true,null,null,true,maxInputBytes);
+    }
     private JsonNode complete(String model,List<? extends Map<String,?>> messages,int maxTokens,CallControl control,boolean external,List<com.tianmu.agent.core.AgentTypes.ToolDefinition> nativeTools,String requiredTool,boolean once) {
         return complete(model,messages,maxTokens,control,external,nativeTools,requiredTool,once,4096);
     }

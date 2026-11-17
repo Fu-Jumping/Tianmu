@@ -38,5 +38,15 @@
     "id": "feedback.pipeline",
     "version": "3.0.0",
     "path": "feedback/pipeline.md"
+  },
+  {
+    "id": "video-notes.draft",
+    "version": "1.0.0",
+    "path": "video-notes/draft.md"
+  },
+  {
+    "id": "video-notes.check",
+    "version": "1.0.0",
+    "path": "video-notes/check.md"
   }
 ]

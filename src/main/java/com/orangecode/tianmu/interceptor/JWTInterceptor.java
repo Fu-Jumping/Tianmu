@@ -52,6 +52,10 @@ public class JWTInterceptor implements HandlerInterceptor {
 
         // These private endpoints authenticate their dedicated service token in the controller.
         if (List.of("/api/internal/agent/vector-work/claim", "/api/internal/agent/vector-work/snapshot", "/api/internal/agent/vector-work/complete").contains(request.getRequestURI())) return true;
+        if ("POST".equals(request.getMethod()) && List.of(
+                "/api/internal/agent/content-processing/grants", "/api/internal/agent/content-processing/check",
+                "/api/internal/agent/content-processing/media", "/api/internal/agent/notes-processing/check",
+                "/api/internal/agent/notes-processing/grants").contains(request.getRequestURI())) return true;
 
         if (excludePaths.contains(request.getRequestURI())) {
             return true;

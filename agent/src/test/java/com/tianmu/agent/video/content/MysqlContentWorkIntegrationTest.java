@@ -212,6 +212,59 @@ class MysqlContentWorkIntegrationTest {
     private ContentTranscriptionWorker worker(ContentWorkService service,ContentProcessingMediaPort media,TranscriptionPort asr,ContentTranscriptStore results) {
         return new ContentTranscriptionWorker(store,service,media,asr,results,"transcriber","asr-v1",Duration.ofSeconds(30),Duration.ofSeconds(5));
     }
+    @Test void bailianWorkerPersistsTimedTranscriptAfterAuthorizedDispatch() throws Exception {
+        var server=com.sun.net.httpserver.HttpServer.create(new java.net.InetSocketAddress("127.0.0.1",0),0);
+        var calls=new AtomicInteger();
+        server.createContext("/asr",exchange->{
+            calls.incrementAndGet(); exchange.getRequestBody().readAllBytes();
+            byte[] body="{\"output\":{\"output\":{\"sentence\":{\"sentence_end\":true,\"text\":\"定义域\",\"begin_time\":200,\"end_time\":30000,\"words\":[{\"text\":\"定义域\",\"begin_time\":200,\"end_time\":30000}]}}}}".getBytes(java.nio.charset.StandardCharsets.UTF_8);
+            exchange.sendResponseHeaders(200,body.length);exchange.getResponseBody().write(body);exchange.close();
+        });
+        server.start();
+        try {
+            Job wrongVersion=enqueue("other-version",3);
+            Job job=store.enqueue(new Unit(asset,Stage.TRANSCRIBE,"bailian-worker",TranscriptPreparation.STAGE_VERSION,0,30000),grant(),Instant.now().plusSeconds(60),3);
+            var service=new ContentWorkService(store,(g,p,c)->{},Duration.ofSeconds(1));
+            var client=new BailianTranscriptionClient(java.net.URI.create("http://127.0.0.1:"+server.getAddress().getPort()+"/asr"),"test-key",new ObjectMapper(),Duration.ofSeconds(10),java.net.http.HttpClient.newHttpClient());
+            var files=new FileContentTranscriptStore(directory,new ObjectMapper());
+            try(var worker=BailianWorkerFactory.assemble(store,service,media(),files,"transcriber",client,Duration.ofSeconds(30),Duration.ofSeconds(5))) {
+                assertEquals(ContentTranscriptionWorker.Outcome.SUCCEEDED,worker.runOnce(control()));
+                assertEquals(ContentTranscriptionWorker.Outcome.NO_WORK,worker.runOnce(control()));
+            }
+            Job done=store.get(job.id());assertEquals(Status.SUCCEEDED,done.status());files.verify(done,done.result());
+            assertEquals(Status.QUEUED,store.get(wrongVersion.id()).status());
+            var saved=new ObjectMapper().readTree(Files.readString(directory.resolve(job.id()+"-1.json")));
+            assertEquals("定义域",saved.at("/transcript/rawText").asText());
+            assertEquals(200,saved.at("/transcript/segments/0/startMs").asLong());
+            assertEquals(30000,saved.at("/transcript/segments/0/endMs").asLong());
+            assertEquals(1,calls.get());
+            var policy=new TranscriptQueryProperties(TranscriptPreparation.STAGE_VERSION,directory.toString(),60000,128,12,8000,4194304,4,15);
+            var reader=new TranscriptRetrievalService(store,files,(id,v,c)->new ContentReadAuthority.Identity(asset,60000),policy);
+            var ready=reader.query(asset.videoId(),viewer(),current(30000),control());
+            assertEquals(TranscriptRetrievalService.Status.READY,ready.status());
+            assertEquals("定义域",ready.excerpts().get(0).text());
+            assertEquals(ready.excerpts().get(0),reader.citation(asset.videoId(),viewer(),current(30000),ready.excerpts().get(0).citationId(),control()));
+            var beforeEnd=reader.query(asset.videoId(),viewer(),current(29999),control());
+            assertTrue(beforeEnd.excerpts().isEmpty(),"The full 30-second source must be in the allowed playback window");
+        } finally {server.stop(0);}
+    }
+    @Test void bailianWorkerRechecksRevocationAtNetworkDispatch() throws Exception {
+        var server=com.sun.net.httpserver.HttpServer.create(new java.net.InetSocketAddress("127.0.0.1",0),0);
+        var calls=new AtomicInteger();
+        server.createContext("/asr",exchange->{calls.incrementAndGet();exchange.sendResponseHeaders(500,-1);exchange.close();});
+        server.start();
+        try {
+            Job job=store.enqueue(new Unit(asset,Stage.TRANSCRIBE,"bailian-revoked",TranscriptPreparation.STAGE_VERSION,0,30000),grant(),Instant.now().plusSeconds(60),3);var checks=new AtomicInteger();
+            var service=new ContentWorkService(store,(g,p,c)->{
+                if(p==Checkpoint.DISPATCH && checks.incrementAndGet()==3)throw new AgentException("CONTENT_GRANT_REVOKED","revoked");
+            },Duration.ofSeconds(1));
+            var client=new BailianTranscriptionClient(java.net.URI.create("http://127.0.0.1:"+server.getAddress().getPort()+"/asr"),"test-key",new ObjectMapper(),Duration.ofSeconds(10),java.net.http.HttpClient.newHttpClient());
+            try(var worker=BailianWorkerFactory.assemble(store,service,media(),new FileContentTranscriptStore(directory,new ObjectMapper()),"transcriber",client,Duration.ofSeconds(30),Duration.ofSeconds(5))) {
+                assertEquals(ContentTranscriptionWorker.Outcome.FAILED,worker.runOnce(control()));
+            }
+            assertEquals(3,checks.get());assertEquals(0,calls.get());assertEquals(Status.REVOKED,store.get(job.id()).status());
+        } finally {server.stop(0);}
+    }
     @Test void workerProcessesOnlyItsRegisteredStageAndVersionAndPersistsPrivateResult()throws Exception {
         var grant=grant();
         store.enqueue(new Unit(asset,Stage.VISION,"frame","vision-v1",0,30000),grant,Instant.now().plusSeconds(60),3);
@@ -297,6 +350,34 @@ class MysqlContentWorkIntegrationTest {
         Receipt receipt=files.save(store.requireLease(lease),lease,transcript);assertTrue(store.complete(lease,receipt));return store.get(job.id());
     }
     private com.tianmu.agent.core.AgentTypes.AccessScope viewer(){return new com.tianmu.agent.core.AgentTypes.AccessScope("site","reader",Set.of(),"read-auth",Set.of(asset.videoId()));}
+    @Test void preparationRequestBindingSurvivesRestartAndRejectsChangedContext() {
+        var id=UUID.randomUUID();var first=new ContentRequestBinding(source);var unit=new Unit(asset,Stage.TRANSCRIBE,"clip-0-30000",TranscriptPreparation.STAGE_VERSION,0,30000);
+        first.bind(id,viewer(),unit,30000);new ContentRequestBinding(source).bind(id,viewer(),unit,30000);
+        var altered=new Unit(asset,Stage.TRANSCRIBE,"clip-1-30000",TranscriptPreparation.STAGE_VERSION,1,30000);
+        assertEquals("CONTENT_REQUEST_CONFLICT",assertThrows(AgentException.class,()->first.bind(id,viewer(),altered,30000)).code());
+        assertEquals("CONTENT_REQUEST_CONFLICT",assertThrows(AgentException.class,()->first.bind(id,viewer(),unit,31000)).code());
+        var other=new com.tianmu.agent.core.AgentTypes.AccessScope("site","other",Set.of(),"",Set.of(asset.videoId()));
+        assertEquals("CONTENT_REQUEST_CONFLICT",assertThrows(AgentException.class,()->first.bind(id,other,unit,30000)).code());
+    }
+    @Test void preparationBindingSurvivesOuterTransactionRollback() {
+        var id=UUID.randomUUID();var binding=new ContentRequestBinding(source);
+        var unit=new Unit(asset,Stage.TRANSCRIBE,"clip-0-30000",TranscriptPreparation.STAGE_VERSION,0,30000);
+        var outer=new org.springframework.transaction.support.TransactionTemplate(new org.springframework.jdbc.datasource.DataSourceTransactionManager(source));
+        assertThrows(IllegalStateException.class,()->outer.executeWithoutResult(status->{binding.bind(id,viewer(),unit,30000);throw new IllegalStateException("rollback outer transaction");}));
+        var restored=new ContentRequestBinding(source);
+        assertEquals("CONTENT_REQUEST_CONFLICT",assertThrows(AgentException.class,()->restored.bind(id,viewer(),unit,30001)).code());
+        restored.bind(id,viewer(),unit,30000);
+    }
+    @Test void concurrentDifferentPreparationContextsCannotShareRequestId() throws Exception {
+        var id=UUID.randomUUID();var binding=new ContentRequestBinding(source);var start=new CountDownLatch(1);
+        var unit=new Unit(asset,Stage.TRANSCRIBE,"clip-0-30000",TranscriptPreparation.STAGE_VERSION,0,30000);
+        var pool=Executors.newFixedThreadPool(2);
+        try {
+            var first=pool.submit(()->{start.await();try{binding.bind(id,viewer(),unit,30000);return "OK";}catch(AgentException e){return e.code();}});
+            var second=pool.submit(()->{start.await();try{binding.bind(id,viewer(),unit,30001);return "OK";}catch(AgentException e){return e.code();}});
+            start.countDown();assertEquals(Set.of("OK","CONTENT_REQUEST_CONFLICT"),Set.of(first.get(15,TimeUnit.SECONDS),second.get(15,TimeUnit.SECONDS)));
+        } finally {pool.shutdownNow();assertTrue(pool.awaitTermination(10,TimeUnit.SECONDS));}
+    }
     private TranscriptQueryProperties readPolicy(int candidates,int concurrency){return new TranscriptQueryProperties("asr-v1",directory.toString(),60000,candidates,12,8000,4194304,concurrency,15);}
     private TranscriptRetrievalService reader()throws Exception {
         return new TranscriptRetrievalService(store,new FileContentTranscriptStore(directory,new ObjectMapper()),

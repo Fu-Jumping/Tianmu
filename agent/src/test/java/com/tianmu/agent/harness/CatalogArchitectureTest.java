@@ -168,7 +168,7 @@ class CatalogArchitectureTest {
     }
     @Test void promptRegistryIsImmutableAndAllRuntimePromptsArePackaged() {
         PromptCatalog catalog = new PromptCatalog();
-        assertEquals(Set.of("feedback.analysis", "feedback.pipeline", "common.json-output", "preparation.emotion", "preparation.intent", "preparation.understanding", "harness.system", "harness.finalize"), catalog.ids());
+        assertEquals(Set.of("feedback.analysis", "feedback.pipeline", "common.json-output", "preparation.emotion", "preparation.intent", "preparation.understanding", "harness.system", "harness.finalize", "video-notes.draft", "video-notes.check"), catalog.ids());
         assertTrue(catalog.text("harness.finalize").contains("Do not call tools"));
         assertThrows(UnsupportedOperationException.class, () -> catalog.ids().clear());
         assertThrows(IllegalStateException.class, () -> catalog.text("not-registered"));

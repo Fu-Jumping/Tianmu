@@ -54,6 +54,7 @@ public final class TraceAttributes {
             "analysis.retry_wait_ms", "analysis.validation_issue", "analysis.result_accepted", "analysis.semantic_review_passed", "analysis.reviewed_topics", "analysis.review_excluded_topics", "video.topic_frame_modes",
             "content.mode", "content.boundary_start_ms", "content.boundary_end_ms", "content.source_version", "content.epoch", "content.stage_version",
             "content.read_status", "content.excerpt_count", "content.gap_count", "content.limitations", "content.history_excluded", "content.history_policy",
+            "notes.job_id", "notes.work_id", "notes.stage", "notes.outcome", "notes.error_code",
             "io.feedback_object_ms", "io.feedback_object_calls", "io.feedback_database_ms", "io.feedback_database_calls");
     public static Map<String, Object> sanitize(Map<String, ?> values) {
         Map<String, Object> clean = new TreeMap<>();

@@ -73,6 +73,16 @@ class JWTInterceptorTest {
         var request=request("");request.setRequestURI("/api/internal/agent/vector-work/other");
         assertFalse(interceptor.preHandle(request,new MockHttpServletResponse(),new Object()));
     }
+    @Test void onlyExactPostContentServiceRoutesSkipUserSession() throws Exception {
+        for(String path:List.of("/api/internal/agent/content-processing/grants","/api/internal/agent/content-processing/check",
+                "/api/internal/agent/content-processing/media","/api/internal/agent/notes-processing/check","/api/internal/agent/notes-processing/grants")) {
+            var request=new MockHttpServletRequest("POST",path);request.setAttribute(CurrentUser.ATTRIBUTE,2L);
+            assertTrue(interceptor.preHandle(request,new MockHttpServletResponse(),new Object()));
+            assertNull(request.getAttribute(CurrentUser.ATTRIBUTE));
+            assertFalse(interceptor.preHandle(new MockHttpServletRequest("GET",path),new MockHttpServletResponse(),new Object()));
+        }
+        assertFalse(interceptor.preHandle(new MockHttpServletRequest("POST","/api/internal/agent/notes-processing/other"),new MockHttpServletResponse(),new Object()));
+    }
 
     @Test void missingOrInvalidTokenCannotPopulateIdentity() throws Exception {
         for (String header : new String[]{"", "invalid"}) {

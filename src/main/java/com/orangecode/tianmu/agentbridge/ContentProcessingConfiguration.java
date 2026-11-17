@@ -14,9 +14,10 @@ public class ContentProcessingConfiguration {
     @Bean BusinessContentAuthority businessContentAuthority(DataSource source,
             org.springframework.beans.factory.ObjectProvider<io.minio.MinioClient> minio,
             BridgeProperties bridge,ContentProcessingProperties policy,
+            @Value("${agent.content-processing.notes-enabled:false}")boolean notesEnabled,
             @Value("${minio.bucket-name:tianmu-upload}")String bucket) {
         // Authority reads the primary database, not a potentially lagging read replica.
         var media=new BusinessVideoContent(new JdbcTemplate(source),minio.getIfAvailable(),bucket);
-        return new BusinessContentAuthority(source,media,bridge.tenantId(),policy.grantSeconds(),policy.querySeconds());
+        return new BusinessContentAuthority(source,media,bridge.tenantId(),policy.grantSeconds(),policy.querySeconds(),notesEnabled,bridge.activeUserStates());
     }
 }

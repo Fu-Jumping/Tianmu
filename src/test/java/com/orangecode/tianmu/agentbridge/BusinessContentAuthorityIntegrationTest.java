@@ -26,17 +26,35 @@ class BusinessContentAuthorityIntegrationTest {
         c.setMaximumPoolSize(8);source=new HikariDataSource(c);
         var db=new JdbcTemplate(source);
         db.execute("CREATE TABLE IF NOT EXISTS video(video_id BIGINT PRIMARY KEY,user_id BIGINT NOT NULL,status INT NOT NULL,is_delete INT NOT NULL,file_url VARCHAR(200),duration DOUBLE,title VARCHAR(200)) ENGINE=InnoDB");
+        db.execute("CREATE TABLE IF NOT EXISTS user(user_id BIGINT PRIMARY KEY,state VARCHAR(16) NOT NULL,is_delete TINYINT NOT NULL) ENGINE=InnoDB");
+        try(var connection=source.getConnection()){ScriptUtils.executeSqlScript(connection,new FileSystemResource("deploy/site/migrations/20261117_notes_grant_owners.sql"));}
         for(String trigger:List.of("agent_media_epoch_insert","agent_media_epoch_update","agent_media_epoch_delete"))db.execute("DROP TRIGGER IF EXISTS "+trigger);
         for(String table:List.of("agent_media_processing_grant","agent_media_authority_epoch","agent_media_authority_schema"))db.execute("DROP TABLE IF EXISTS "+table);
         try(var connection=source.getConnection()){ScriptUtils.executeSqlScript(connection,new FileSystemResource("deploy/site/migrations/20261115_content_processing_authority.sql"));}
     }
     @AfterAll static void close(){if(source!=null)source.close();}
     @BeforeEach void reset(){
-        db=new JdbcTemplate(source);db.update("DELETE FROM agent_media_processing_grant");db.update("DELETE FROM video");db.update("DELETE FROM agent_media_authority_epoch");
+        db=new JdbcTemplate(source);db.update("DELETE FROM agent_notes_grant_owner");db.update("DELETE FROM user");db.update("DELETE FROM agent_media_processing_grant");db.update("DELETE FROM video");db.update("DELETE FROM agent_media_authority_epoch");
         db.update("INSERT INTO video(video_id,user_id,status,is_delete,file_url,duration,title) VALUES(7,1,2,0,'sample.mp4',60,'course')");
         media=mock(BusinessVideoContent.class);
         when(media.publicSource(7)).thenReturn(new BusinessVideoContent.Source(7,VERSION,60000));
         authority=new BusinessContentAuthority(source,media,"site",900,5);
+    }
+    @Test void notesGrantIsBoundToOwnerAndRevokedWhenAccountDisabled(){
+        db.update("INSERT INTO user(user_id,state,is_delete) VALUES(123,'0',0)");
+        var notes=new BusinessContentAuthority(source,media,"site",900,5,true,Set.of("0"));var id=UUID.randomUUID();
+        var grant=notes.issueNotes(id,7,"123");assertEquals(grant,notes.issueNotes(id,7,"123"));notes.require(grant);
+        assertEquals("FULL_VIDEO_NOTES",db.queryForObject("SELECT purpose FROM agent_media_processing_grant WHERE grant_id=?",String.class,id.toString()));
+        assertThrows(BridgeException.class,()->authority.require(grant)); // Feature-off rollback cannot reuse a notes grant.
+        assertThrows(BridgeException.class,()->notes.issueNotes(id,7,"124"));
+        db.update("UPDATE user SET is_delete=1 WHERE user_id=123");assertThrows(BridgeException.class,()->notes.require(grant));
+        assertEquals(1,db.queryForObject("SELECT COUNT(*) FROM agent_notes_grant_owner WHERE grant_id=?",Integer.class,id.toString()));
+    }
+    @Test void notesCannotRebindAnExistingPlatformGrant(){
+        db.update("INSERT INTO user(user_id,state,is_delete) VALUES(123,'0',0)");var id=UUID.randomUUID();authority.issue(id,7);
+        var notes=new BusinessContentAuthority(source,media,"site",900,5,true,Set.of("0"));
+        assertThrows(BridgeException.class,()->notes.issueNotes(id,7,"123"));
+        assertEquals(0,db.queryForObject("SELECT COUNT(*) FROM agent_notes_grant_owner WHERE grant_id=?",Integer.class,id.toString()));
     }
     @Test void grantIsDurableIdempotentAndCannotBeForged(){
         UUID id=UUID.randomUUID();var grant=authority.issue(id,7);

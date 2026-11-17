@@ -51,6 +51,14 @@ public final class MysqlContentWorkStore {
         var r = rows.get(0);
         return row(id,r);
     }
+    /** Only work never claimed by any worker may renew in place. Fence protects the claim race. */
+    public boolean renewUnclaimed(UUID id,UUID expectedGrant,long expectedFence,Grant renewed,Instant deadline) {
+        Objects.requireNonNull(id);Objects.requireNonNull(expectedGrant);Objects.requireNonNull(renewed);Objects.requireNonNull(deadline);
+        Job current=get(id);
+        if(!current.unit().asset().equals(renewed.asset()) || !deadline.isAfter(now()) || deadline.isAfter(renewed.expiresAt()))throw error("CONTENT_GRANT_EXPIRED");
+        return db.update("UPDATE agent_content_work SET grant_json=?,deadline_at=?,status='QUEUED',error_code=NULL,ready_at=UTC_TIMESTAMP(6),fence=fence+1,updated_at=UTC_TIMESTAMP(6) WHERE job_id=? AND fence=? AND attempts=0 AND result_ref IS NULL AND status IN ('QUEUED','EXPIRED') AND JSON_UNQUOTE(JSON_EXTRACT(grant_json,'$.id'))=?",
+                encode(renewed),utc(deadline),id.toString(),expectedFence,expectedGrant.toString())==1;
+    }
     private Job row(UUID id,Map<String,Object> r) {
         return new Job(id, decode(r.get("document"), Unit.class), decode(r.get("grant_json"), Grant.class),
                 Status.valueOf(r.get("status").toString()), ((Number)r.get("attempts")).intValue(),

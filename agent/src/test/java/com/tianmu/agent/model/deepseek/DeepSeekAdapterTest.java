@@ -64,6 +64,20 @@ class DeepSeekAdapterTest {
     }
     @AfterEach void stop() { if (release != null) release.countDown(); server.stop(0); }
     CallControl control() { return new CallControl(Instant.now().plusSeconds(2), new CancellationToken()); }
+    @Test void structuredOnceUsesTheSharedTransportAndRejectsOversizedInputBeforeSend() {
+        answer=request->"{\"passed\":true,\"majorIssues\":[]}";
+        var messages=List.of(Map.of("role","user","content","Return JSON"));
+        assertTrue(client.completeStructuredOnce(properties.analysisModel(),messages,2048,4096,control()).path("passed").booleanValue());
+        assertEquals(1,requests.size());assertEquals(2048,requests.get(0).path("max_tokens").intValue());
+        assertEquals("disabled",requests.get(0).path("thinking").path("type").asText());
+        assertThrows(AgentException.class,()->client.completeStructuredOnce(properties.analysisModel(),List.of(Map.of("role","user","content","x".repeat(5000))),2048,4096,control()));
+        assertEquals(1,requests.size());
+    }
+    @Test void structuredOnceRevocationBarrierPreventsAnyHttpCall() {
+        var revoked=control().withDispatchBarrier(()->{throw new AgentException("FORBIDDEN","revoked");});
+        assertThrows(AgentException.class,()->client.completeStructuredOnce(properties.analysisModel(),List.of(Map.of("role","user","content","Return JSON")),2048,4096,revoked));
+        assertTrue(requests.isEmpty());
+    }
     @Test void mainAndBatchAnalysisSendTheirOwnThinkingEffortAndBudget(){
         client.complete(properties.analysisModel(),List.of(Map.of("role","user","content","Return JSON")),properties.analysisMaxTokens(),control(),true);
         assertEquals("enabled",requests.get(0).path("thinking").path("type").asText());assertEquals("low",requests.get(0).path("reasoning_effort").asText());assertEquals(16384,requests.get(0).path("max_tokens").asInt());

@@ -20,7 +20,7 @@ public final class HttpContentProcessingAuthority implements ContentProcessingAu
     public HttpContentProcessingAuthority(URI base,String token,Duration timeout,ObjectMapper json) {
         if(base==null || !Set.of("http","https").contains(base.getScheme()) || base.getHost()==null
                 || base.getUserInfo()!=null || base.getQuery()!=null || base.getFragment()!=null
-                || !Set.of("","/").contains(base.getPath()) || token==null || !token.matches("[\\x21-\\x7e]{32,256}")
+                || !Set.of("","/","/api","/api/").contains(base.getPath()) || token==null || !token.matches("[\\x21-\\x7e]{32,256}")
                 || timeout==null || timeout.isNegative() || timeout.isZero() || timeout.compareTo(Duration.ofSeconds(60))>0)
             throw new IllegalArgumentException("Invalid content authority transport");
         this.base=URI.create(base.toString().replaceAll("/+$",""));this.token=token;this.timeout=timeout;
@@ -34,6 +34,16 @@ public final class HttpContentProcessingAuthority implements ContentProcessingAu
         ContentWork.Grant grant=post("/grants",Map.of("requestId",requestId,"videoId",Long.toString(videoId)),ContentWork.Grant.class,control);
         if(!requestId.equals(grant.id()) || grant.asset().videoId()!=videoId || !"public".equals(grant.asset().authorizationDomain()))
             throw new AgentException("INVALID_CONTENT_GRANT","Invalid platform media grant");
+        return grant;
+    }
+    /** Trusted background context comes from the persisted server-owned notes Root. */
+    public void requireNotes(String tenant,String user,ContentAssetKey asset,long duration,CallControl control) {
+        postTo("/internal/agent/notes-processing/check",Map.of("tenantId",tenant,"userId",user,"asset",asset,"durationMs",duration),Void.class,control);
+    }
+    public ContentWork.Grant issueNotes(String tenant,String user,ContentAssetKey asset,long duration,UUID requestId,CallControl control) {
+        var context=Map.of("tenantId",tenant,"userId",user,"asset",asset,"durationMs",duration);
+        var grant=postTo("/internal/agent/notes-processing/grants",Map.of("context",context,"requestId",requestId),ContentWork.Grant.class,control);
+        if(grant==null || !requestId.equals(grant.id()) || !asset.equals(grant.asset()))throw new AgentException("INVALID_CONTENT_GRANT","Notes grant differs from frozen media");
         return grant;
     }
     public void require(ContentWork.Grant grant,ContentWork.Checkpoint checkpoint,CallControl control) {
@@ -56,11 +66,14 @@ public final class HttpContentProcessingAuthority implements ContentProcessingAu
         return result;
     }
     private <T> T post(String path,Object body,Class<T> type,CallControl control) {
+        return postTo("/internal/agent/content-processing"+path,body,type,control);
+    }
+    private <T> T postTo(String path,Object body,Class<T> type,CallControl control) {
         control.checkpoint();
         long millis=Math.min(timeout.toMillis(),Duration.between(Instant.now(),control.deadline()).toMillis());
         if(millis<=0)throw new AgentException("DEADLINE_EXCEEDED","Content authority deadline exceeded");
         try {
-            var request=HttpRequest.newBuilder(URI.create(base+"/internal/agent/content-processing"+path))
+            var request=HttpRequest.newBuilder(URI.create(base+path))
                     .timeout(Duration.ofMillis(millis)).header("X-Content-Processing-Token",token)
                     .header("Content-Type","application/json").POST(HttpRequest.BodyPublishers.ofByteArray(json.writeValueAsBytes(body))).build();
             var future=http.sendAsync(request,ignored->new BoundedHttpBody(8_000_000));

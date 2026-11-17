@@ -16,6 +16,15 @@ class HttpContentProcessingAuthorityTest {
     private final ObjectMapper json=new ObjectMapper().findAndRegisterModules();
     private static CallControl control(){return new CallControl(Instant.now().plusSeconds(10),new CancellationToken());}
     private HttpContentProcessingAuthority client(HttpServer server){return new HttpContentProcessingAuthority(URI.create("http://127.0.0.1:"+server.getAddress().getPort()),TOKEN,Duration.ofSeconds(5),json);}
+    @Test void businessServletContextIsRetainedForInternalCalls()throws Exception {
+        var server=HttpServer.create(new InetSocketAddress("127.0.0.1",0),0);var called=new AtomicBoolean();
+        server.createContext("/api/internal/agent/notes-processing/check",exchange->{try(exchange){called.set(true);exchange.sendResponseHeaders(200,-1);}});server.start();
+        try {
+            var client=new HttpContentProcessingAuthority(URI.create("http://127.0.0.1:"+server.getAddress().getPort()+"/api"),TOKEN,Duration.ofSeconds(5),json);
+            client.requireNotes("site","123",new ContentAssetKey("site",7,"v1","public",1),30000,control());assertTrue(called.get());
+            assertThrows(IllegalArgumentException.class,()->new HttpContentProcessingAuthority(URI.create("http://127.0.0.1:1/untrusted"),TOKEN,Duration.ofSeconds(5),json));
+        }finally{server.stop(0);}
+    }
     @Test void grantWireProtocolUsesServiceTokenAndExactStringVideoId()throws Exception {
         var server=HttpServer.create(new InetSocketAddress("127.0.0.1",0),0);
         AtomicReference<String> id=new AtomicReference<>(),token=new AtomicReference<>();
@@ -73,5 +82,18 @@ class HttpContentProcessingAuthorityTest {
         var grant=new ContentWork.Grant(UUID.randomUUID(),new ContentAssetKey("site",7,"v1","public",1),Instant.now().plusSeconds(60));
         try{assertTrue(client(server).audio(grant,0,1000,control()).frames().isEmpty());assertTrue(audioOnly.get());}
         finally{server.stop(0);}
+    }
+    @Test void notesAuthorizationBindsOwnerAndRejectsMismatchedMediaGrant()throws Exception {
+        var server=HttpServer.create(new InetSocketAddress("127.0.0.1",0),0);AtomicReference<String> seenUser=new AtomicReference<>();AtomicBoolean mismatch=new AtomicBoolean();
+        server.createContext("/internal/agent/notes-processing/grants",exchange->{try(exchange){
+            var body=json.readTree(exchange.getRequestBody());seenUser.set(body.path("context").path("userId").asText());
+            var asset=new ContentAssetKey("site",7,mismatch.get()?"changed":"v1","public",1);
+            byte[] result=json.writeValueAsBytes(new ContentWork.Grant(UUID.fromString(body.path("requestId").asText()),asset,Instant.now().plusSeconds(60)));
+            exchange.sendResponseHeaders(200,result.length);exchange.getResponseBody().write(result);
+        }});server.start();
+        try{var asset=new ContentAssetKey("site",7,"v1","public",1);var id=UUID.randomUUID();
+            assertEquals(id,client(server).issueNotes("site","123",asset,30000,id,control()).id());assertEquals("123",seenUser.get());
+            mismatch.set(true);assertEquals("INVALID_CONTENT_GRANT",assertThrows(AgentException.class,()->client(server).issueNotes("site","123",asset,30000,id,control())).code());
+        }finally{server.stop(0);}
     }
 }

@@ -48,6 +48,7 @@ public final class VideoModelClient implements VisionModelPort, TranscriptionPor
         payload.put("messages",List.of(Map.of("role","user","content",content))); payload.put("max_tokens",2048);
         payload.put("response_format",Map.of("type","json_object")); payload.put("stream",false);
         if ("api.deepseek.com".equals(config.baseUrl().getHost())) payload.put("thinking",Map.of("type","disabled"));
+        if (config.baseUrl().getHost().endsWith("aliyuncs.com") && config.model().startsWith("qwen3")) payload.put("enable_thinking",false);
         TraceDetails.capture("input",Map.of("videoId",media.source().videoId(),"startMs",media.startMs(),"endMs",media.endMs(),"focus",focus,"sampledAtMs",media.frames().stream().map(VideoContent.Frame::atMs).toList(),"audioTranscribed",!transcript.isBlank()),"VIDEO_MODEL_INPUT");
         try {
             JsonNode body = send("/chat/completions","application/json",json.writeValueAsBytes(payload),control);

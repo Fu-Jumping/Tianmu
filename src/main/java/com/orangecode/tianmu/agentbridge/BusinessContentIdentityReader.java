@@ -23,6 +23,17 @@ public final class BusinessContentIdentityReader {
         if(before!=publicEpoch(videoId))throw new BridgeException("VIDEO_VERSION_CHANGED",409);
         return new Identity(new BusinessContentAuthority.Asset(tenant,videoId,source.sourceVersion(),"public",before),source.durationMs());
     }
+    /** Background owner revalidation uses the primary database, not the authentication read replica. */
+    public BusinessAuthentication.Principal activeViewer(String requestedTenant,String user,java.util.Set<String> activeStates) {
+        if(!tenant.equals(requestedTenant) || user==null || !user.matches("[1-9][0-9]{0,18}") || activeStates==null || activeStates.isEmpty())
+            throw new BridgeException("FORBIDDEN",403);
+        try {
+            var rows=db.queryForList("SELECT state FROM user WHERE user_id=? AND is_delete=0",Long.parseLong(user));
+            if(rows.size()!=1 || !activeStates.contains(String.valueOf(rows.get(0).get("state"))))throw new BridgeException("FORBIDDEN",403);
+            return new BusinessAuthentication.Principal(tenant,user);
+        } catch(BridgeException denied){throw denied;}
+        catch(Exception unavailable){throw new BridgeException("BUSINESS_UNAVAILABLE",503);}
+    }
     private long publicEpoch(long videoId) {
         var rows=db.queryForList("SELECT e.epoch FROM agent_media_authority_epoch e JOIN video v ON v.video_id=e.video_id WHERE v.video_id=? AND v.status=2 AND v.is_delete=0",videoId);
         if(rows.size()!=1)throw new BridgeException("FORBIDDEN",403);

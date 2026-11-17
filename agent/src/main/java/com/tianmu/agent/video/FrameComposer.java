@@ -16,7 +16,8 @@ final class FrameComposer {
     byte[] compose(List<VideoContent.Frame> frames, CallControl control) {
         if (frames == null || frames.isEmpty() || frames.size() > 12) throw invalid();
         control.checkpoint();
-        var sheet = new BufferedImage(1920, ((frames.size() + 2) / 3) * 400, BufferedImage.TYPE_INT_RGB);
+        int columns=frames.size()==4?2:Math.min(3,frames.size());
+        var sheet = new BufferedImage(columns * 640, ((frames.size() + columns - 1) / columns) * 400, BufferedImage.TYPE_INT_RGB);
         var graphics = sheet.createGraphics();
         try {
             graphics.setColor(Color.BLACK); graphics.fillRect(0, 0, sheet.getWidth(), sheet.getHeight());
@@ -25,7 +26,7 @@ final class FrameComposer {
                 control.checkpoint();
                 var frame = frames.get(i);
                 var image = decode(frame.jpegBase64());
-                int x = i % 3 * 640, y = i / 3 * 400;
+                int x = i % columns * 640, y = i / columns * 400;
                 double scale = Math.min(640.0 / image.getWidth(), 360.0 / image.getHeight());
                 int width = (int) (image.getWidth() * scale), height = (int) (image.getHeight() * scale);
                 graphics.drawImage(image, x + (640 - width) / 2, y, width, height, null);

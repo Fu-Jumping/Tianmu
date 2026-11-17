@@ -17,12 +17,34 @@ public final class BusinessContentAuthority {
     private final BusinessVideoContent media;
     private final String tenant;
     private final int ttlSeconds;
+    private final boolean notesEnabled;
+    private final Set<String> activeUserStates;
     public BusinessContentAuthority(DataSource source,BusinessVideoContent media,String tenant,int ttlSeconds,int querySeconds) {
+        this(source,media,tenant,ttlSeconds,querySeconds,false,Set.of());
+    }
+    public BusinessContentAuthority(DataSource source,BusinessVideoContent media,String tenant,int ttlSeconds,int querySeconds,boolean notesEnabled,Set<String> activeUserStates) {
         if(tenant==null || !tenant.matches("[A-Za-z0-9_-]{1,64}") || ttlSeconds<30 || ttlSeconds>3600 || querySeconds<1 || querySeconds>10)
             throw new IllegalArgumentException("Invalid content authority policy");
         this.db=new JdbcTemplate(source);db.setQueryTimeout(querySeconds);
         this.tx=new TransactionTemplate(new DataSourceTransactionManager(source));tx.setTimeout(querySeconds);
         this.media=Objects.requireNonNull(media);this.tenant=tenant;this.ttlSeconds=ttlSeconds;
+        this.notesEnabled=notesEnabled;this.activeUserStates=Set.copyOf(activeUserStates);
+        if(notesEnabled && this.activeUserStates.isEmpty())throw new IllegalArgumentException("Active user states required for notes grants");
+    }
+    /** Owner binding and legacy grant creation share the same primary-database transaction. */
+    public Grant issueNotes(UUID requestId,long videoId,String userId) {
+        if(!notesEnabled || requestId==null || videoId<=0 || userId==null || !userId.matches("[1-9][0-9]{0,18}"))throw new BridgeException("FORBIDDEN",403);
+        return tx.execute(status->{
+            var rows=db.queryForList("SELECT tenant_id,user_id,purpose FROM agent_notes_grant_owner WHERE grant_id=? FOR UPDATE",requestId.toString());
+            if(rows.isEmpty()) {
+                if(find(requestId)!=null)throw new BridgeException("CONTENT_GRANT_CONFLICT",409);
+                db.update("INSERT INTO agent_notes_grant_owner(grant_id,tenant_id,user_id,purpose) VALUES(?,?,?,'FULL_VIDEO_NOTES')",requestId.toString(),tenant,Long.parseLong(userId));
+            } else if(rows.size()!=1 || !tenant.equals(rows.get(0).get("tenant_id")) || !userId.equals(String.valueOf(rows.get(0).get("user_id")))
+                    || !"FULL_VIDEO_NOTES".equals(rows.get(0).get("purpose")))throw new BridgeException("CONTENT_GRANT_CONFLICT",409);
+            Grant grant=issue(requestId,videoId);
+            db.update("UPDATE agent_media_processing_grant SET purpose='FULL_VIDEO_NOTES' WHERE grant_id=? AND tenant_id=? AND purpose='VIDEO_CONTENT_PREPARATION'",requestId.toString(),tenant);
+            require(grant);return grant;
+        });
     }
     public Grant issue(UUID requestId,long videoId) {
         if(requestId==null || videoId<=0)throw new BridgeException("INVALID_CONTENT_REQUEST",400);
@@ -62,13 +84,23 @@ public final class BusinessContentAuthority {
         Grant stored=find(supplied.id());
         if(!supplied.equals(stored))throw new BridgeException("CONTENT_GRANT_REVOKED",403);
         requireEpoch(stored);
+        if(notesEnabled)requireNotesOwnerIfPresent(stored);
         if(!media.publicSource(stored.asset().videoId()).sourceVersion().equals(stored.asset().sourceVersion()))
             throw new BridgeException("VIDEO_VERSION_CHANGED",409);
         requireEpoch(stored);
+        if(notesEnabled)requireNotesOwnerIfPresent(stored);
+    }
+    private void requireNotesOwnerIfPresent(Grant grant) {
+        var owners=db.queryForList("SELECT g.purpose AS grant_purpose,o.tenant_id,o.purpose,u.state,u.is_delete FROM agent_media_processing_grant g LEFT JOIN agent_notes_grant_owner o ON o.grant_id=g.grant_id LEFT JOIN user u ON u.user_id=o.user_id WHERE g.grant_id=?",grant.id().toString());
+        if(owners.size()!=1)throw new BridgeException("CONTENT_GRANT_REVOKED",403);
+        var owner=owners.get(0);if(owner.get("tenant_id")==null && "VIDEO_CONTENT_PREPARATION".equals(owner.get("grant_purpose")))return;
+        if(!tenant.equals(owner.get("tenant_id")) || !"FULL_VIDEO_NOTES".equals(owner.get("purpose"))
+                || !Set.of("0","false").contains(String.valueOf(owner.get("is_delete")).toLowerCase(Locale.ROOT)) || !activeUserStates.contains(String.valueOf(owner.get("state"))))
+            throw new BridgeException("CONTENT_GRANT_REVOKED",403);
     }
     private void requireEpoch(Grant grant) {
-        Integer count=db.queryForObject("SELECT COUNT(*) FROM agent_media_processing_grant g JOIN agent_media_authority_epoch e ON e.video_id=g.video_id JOIN video v ON v.video_id=g.video_id WHERE g.grant_id=? AND g.tenant_id=? AND g.revoked_at IS NULL AND g.expires_at>UTC_TIMESTAMP(6) AND g.purpose='VIDEO_CONTENT_PREPARATION' AND e.epoch=g.revocation_epoch AND v.status=2 AND v.is_delete=0",
-                Integer.class,grant.id().toString(),tenant);
+        Integer count=db.queryForObject("SELECT COUNT(*) FROM agent_media_processing_grant g JOIN agent_media_authority_epoch e ON e.video_id=g.video_id JOIN video v ON v.video_id=g.video_id WHERE g.grant_id=? AND g.tenant_id=? AND g.revoked_at IS NULL AND g.expires_at>UTC_TIMESTAMP(6) AND (g.purpose='VIDEO_CONTENT_PREPARATION' OR (?=1 AND g.purpose='FULL_VIDEO_NOTES')) AND e.epoch=g.revocation_epoch AND v.status=2 AND v.is_delete=0",
+                Integer.class,grant.id().toString(),tenant,notesEnabled?1:0);
         if(count==null || count!=1)throw new BridgeException("CONTENT_GRANT_REVOKED",403);
     }
     public BusinessVideoContent.Media read(Grant grant,long startMs,long endMs) {

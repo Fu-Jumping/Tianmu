@@ -95,8 +95,12 @@ public final class BusinessVideoContent {
             if (end - start <= 120_000) {
                 Path wav = temp.resolve("audio.wav");
                 // Optional audio stream: silent clips are valid visual inputs.
-                process(List.of("ffmpeg", "-nostdin", "-v", "error", "-protocol_whitelist", "file,pipe", "-format_whitelist", "mov,matroska,webm,avi", "-threads", "1", "-ss", seconds(start),
-                        "-i", input.toString(), "-t", seconds(end - start), "-map", "0:a:0?", "-vn", "-ac", "1", "-ar", "16000", "-c:a", "pcm_s16le", "-threads", "1", wav.toString()), deadline, true);
+                var args=new ArrayList<>(List.of("ffmpeg", "-nostdin", "-v", "error", "-protocol_whitelist", "file,pipe", "-format_whitelist", "mov,matroska,webm,avi", "-threads", "1", "-ss", seconds(start),
+                        "-i", input.toString(), "-t", seconds(end - start), "-map", "0:a:0?", "-vn", "-ac", "1", "-ar", "16000", "-c:a", "pcm_s16le"));
+                // Container audio may end a few codec frames before its video. Only the final
+                // clip can fill that bounded missing tail; larger gaps remain invalid downstream.
+                if(audioOnly && end==source.durationMs())args.addAll(List.of("-af","apad=pad_dur=0.25"));
+                args.addAll(List.of("-threads","1",wav.toString()));process(args,deadline,true);
                 if (Files.exists(wav) && Files.size(wav) > 44 && Files.size(wav) < 4_000_000)
                     audio = Base64.getEncoder().encodeToString(Files.readAllBytes(wav));
             }

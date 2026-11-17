@@ -34,6 +34,17 @@ class AudioOnlyExtractionIntegrationTest {
         var media=service.publicAudioSample(7,version,0,1000);
         assertTrue(media.frames().isEmpty());byte[] wav=Base64.getDecoder().decode(media.audioBase64());
         assertTrue(wav.length>44);assertEquals('R',wav[0]);assertEquals('I',wav[1]);
-        assertEquals("VIDEO_DECODE_FAILED",assertThrows(BridgeException.class,()->service.publicSample(7,version,0,1000)).code());
+        when(db.queryForList(anyString(),any(Object[].class))).thenReturn(List.of(Map.of("file_url","http://storage/tianmu-upload/abcdefgh.mp4","duration",2.15)));
+        var finalMedia=service.publicAudioSample(7,service.publicSource(7).sourceVersion(),0,2150);
+        assertEquals(2150*32,waveDataSize(Base64.getDecoder().decode(finalMedia.audioBase64())));
+        when(db.queryForList(anyString(),any(Object[].class))).thenReturn(List.of(Map.of("file_url","http://storage/tianmu-upload/abcdefgh.mp4","duration",2.5)));
+        var missingTail=service.publicAudioSample(7,service.publicSource(7).sourceVersion(),0,2500);
+        assertTrue(waveDataSize(Base64.getDecoder().decode(missingTail.audioBase64()))<2500*32);
+        assertEquals("VIDEO_DECODE_FAILED",assertThrows(BridgeException.class,()->service.publicSample(7,service.publicSource(7).sourceVersion(),0,1000)).code());
+    }
+    private static int waveDataSize(byte[] bytes) {
+        var b=java.nio.ByteBuffer.wrap(bytes).order(java.nio.ByteOrder.LITTLE_ENDIAN);
+        for(int i=12;i+8<=bytes.length;){int size=b.getInt(i+4);if(bytes[i]=='d' && bytes[i+1]=='a' && bytes[i+2]=='t' && bytes[i+3]=='a')return size;i+=8+size+(size&1);}
+        throw new AssertionError("WAV data chunk missing");
     }
 }

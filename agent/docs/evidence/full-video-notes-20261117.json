@@ -1,0 +1,42 @@
+{
+  "date": "2026-11-17",
+  "scope": "First Songhao 30-minute notes acceptance; not all video types",
+  "jobId": "36b01e29-d513-4928-9c4b-7a06cba2c025",
+  "status": "READY",
+  "sections": 6,
+  "coverageUnits": 60,
+  "durationMs": 1799964,
+  "summaryTrace": "a6d33472de14414e496939ee226914d0",
+  "api": {
+    "httpsStatus": 200,
+    "cacheControl": "no-store",
+    "duplicateCreateSameJob": true,
+    "anonymousRejected": true,
+    "unknownDocumentRejected": true,
+    "wrongVersionRejected": true
+  },
+  "ui": [
+    {
+      "width": 1440,
+      "title": "高等数学2.0版：映射、逆映射与复合映射",
+      "copiedCharacters": 2963,
+      "reload": true,
+      "seek": true
+    },
+    {
+      "width": 390,
+      "title": "高等数学2.0版：映射、逆映射与复合映射",
+      "copiedCharacters": 2963,
+      "reload": true,
+      "seek": false
+    }
+  ],
+  "javaTests": 56,
+  "frontendTests": 5,
+  "cleanSourceBuild": true,
+  "limitations": [
+    "Bounded single-batch synthesis",
+    "First-generation latency needs improvement",
+    "More video types not yet accepted"
+  ]
+}

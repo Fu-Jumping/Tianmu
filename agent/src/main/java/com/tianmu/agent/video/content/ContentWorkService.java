@@ -19,9 +19,13 @@ public final class ContentWorkService {
         this.retryBackoff = retryBackoff;
     }
     public Job admit(Unit unit, Grant grant, Instant deadline, int maxAttempts, CallControl control) {
+        requireAdmission(unit,grant,control);
+        return store.enqueue(unit, grant, deadline, maxAttempts);
+    }
+    /** Separate the external authority call from a short caller-owned enqueue/binding transaction. */
+    public void requireAdmission(Unit unit, Grant grant, CallControl control) {
         if (!unit.asset().equals(grant.asset())) throw new IllegalArgumentException("Grant belongs to another media version");
         require(grant, Checkpoint.ADMISSION, control);
-        return store.enqueue(unit, grant, deadline, maxAttempts);
     }
     public Optional<Lease> claim(String worker, Duration leaseDuration, CallControl control) {
         return claim(worker, leaseDuration, null, null, control);
@@ -64,6 +68,12 @@ public final class ContentWorkService {
             throw new IllegalArgumentException("Retry cannot change the media authority");
         require(renewed, Checkpoint.ADMISSION, control);
         return store.requeue(jobId, renewed, deadline, additionalAttempts);
+    }
+    public boolean renewUnclaimed(UUID jobId,UUID expectedGrant,long expectedFence,Grant renewed,Instant deadline,CallControl control) {
+        Job current=store.get(jobId);
+        if(!current.unit().asset().equals(renewed.asset()))throw new IllegalArgumentException("Renewal cannot change media authority");
+        require(renewed,Checkpoint.ADMISSION,control);
+        return store.renewUnclaimed(jobId,expectedGrant,expectedFence,renewed,deadline);
     }
     private void require(Grant grant, Checkpoint checkpoint, CallControl control) {
         control.checkpoint();

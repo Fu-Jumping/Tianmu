@@ -43,6 +43,7 @@
       </header>
       <MemoryManager v-if="memoryOpen" :video-id="form.videoId" @close="closeMemory" />
       <VideoContentIndex v-if="form.videoId && !contextPending" :key="form.videoId" :video-id="form.videoId" :video-title="contextTitle" @remove="form.videoId = ''" />
+      <VideoNotes v-if="form.videoId && !contextPending" :key="form.videoId" :video-id="form.videoId" />
       <div ref="conversationElement" class="conversation-scroll" :style="fadeStyle" @scroll.passive="trackConversationScroll" @wheel.passive="markConversationIntent" @touchstart.passive="markConversationIntent" @keydown="markConversationIntent">
         <div ref="conversationContent" class="workspace-content">
           <button v-if="historyCursor" class="text-button" :disabled="loadingHistory" @click="loadOlderMessages">{{ loadingHistory ? '正在读取…' : '加载更早的消息' }}</button>
@@ -264,6 +265,7 @@ import ModelPicker from '@/components/agent/ModelPicker.vue';
 import { useConversationViewport } from '@/composables/useConversationViewport';
 import { reportDocumentHtml } from '@/agent/report-document.mjs';
 import VideoContentIndex from '@/components/agent/VideoContentIndex.vue';
+import VideoNotes from '@/components/agent/VideoNotes.vue';
 import { getAssistantModels } from '@/api/agent';
 import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue';
 import MemoryManager from '@/components/agent/MemoryManager.vue';
