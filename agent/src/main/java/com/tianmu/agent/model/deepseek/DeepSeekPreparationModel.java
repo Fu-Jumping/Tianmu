@@ -1,10 +1,15 @@
 package com.tianmu.agent.model.deepseek;
 
+import com.tianmu.agent.core.AgentException;
 import com.tianmu.agent.core.PreparationTypes.*;
+import com.tianmu.agent.core.TaskTypes.Specification;
 import com.tianmu.agent.preparation.PreparationModelPort;
+import com.tianmu.agent.preparation.TaskMeaning;
 import com.tianmu.agent.prompt.PromptCatalog;
 import com.tianmu.agent.runtime.control.CallControl;
 import com.fasterxml.jackson.databind.*;
+import com.fasterxml.jackson.databind.node.ObjectNode;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import static com.tianmu.agent.model.deepseek.StructuredModelOutput.*;
@@ -20,7 +25,7 @@ final class DeepSeekPreparationModel implements PreparationModelPort {
     private final DeepSeekClient client;
     private final DeepSeekProperties config;
     private final ObjectMapper mapper;
-    private final String emotionPrompt, understandingPrompt, intentPrompt;
+    private final String emotionPrompt, understandingPrompt, intentPrompt, legacyIntentPrompt;
     private final PromptCatalog prompts;
     DeepSeekPreparationModel(DeepSeekClient client, DeepSeekProperties config, ObjectMapper mapper, PromptCatalog prompts) {
         this.client = client; this.config = config; this.mapper = mapper;this.prompts=prompts;
@@ -28,30 +33,25 @@ final class DeepSeekPreparationModel implements PreparationModelPort {
         emotionPrompt = prompts.text("preparation.emotion") + common;
         understandingPrompt = prompts.text("preparation.understanding") + common;
         intentPrompt = prompts.text("preparation.intent") + common;
+        legacyIntentPrompt = prompts.text("preparation.intent-legacy") + common;
     }
-    private JsonNode call(String id,String variant,String prompt, Input input, CallControl control, int tokens) {
-        Map<String, Object> payload = new java.util.LinkedHashMap<>();
+    private Map<String, Object> context(Input input) {
+        Map<String, Object> payload = new LinkedHashMap<>();
         payload.put("memory", input.memory()); payload.put("query", input.query()); payload.put("businessDate", input.businessDate().toString());
         payload.put("requestedAt",input.requestedAt().toString());
-        if(prompt.equals(intentPrompt) && !input.intentCandidates().isEmpty())
-            payload.put("intentCandidates",input.intentCandidates().stream().map(CandidateView::new).toList());
-        try {
-            payload.put("serverTaskCandidate",com.tianmu.agent.preparation.TaskMeaning.defaults()
-                    .resolve(input.query(),input.businessDate(),input.requestedAt(),input.memory()));
-        } catch(com.tianmu.agent.core.AgentException ambiguous) {
-            if(!"AMBIGUOUS_ANALYSIS_SOURCES".equals(ambiguous.code()))throw ambiguous;
-            payload.put("serverTaskCandidate",Map.of("type","unclassified","requiresClarification",true));
-        }
+        return payload;
+    }
+    private JsonNode call(String id,String variant,String prompt, Map<String, Object> payload, CallControl control, int tokens) {
         return prompts.trace(id,variant,prompt,java.util.List.of("common.json-output"),()->client.complete(config.preparationModel(), client.messages(prompt, payload,control), tokens, control));
     }
     @Override public String revision() {
         try {
             return java.util.HexFormat.of().formatHex(java.security.MessageDigest.getInstance("SHA-256").digest(mapper.writeValueAsBytes(
-                java.util.List.of("chat-native-v1",config.baseUrl().toString(),config.preparationModel(),config.preparationMaxTokens(),emotionPrompt,understandingPrompt,intentPrompt))));
+                java.util.List.of("chat-native-v1",config.baseUrl().toString(),config.preparationModel(),config.preparationMaxTokens(),emotionPrompt,understandingPrompt,intentPrompt,legacyIntentPrompt))));
         } catch(Exception error){throw new IllegalStateException("Cannot fingerprint preparation model",error);}
     }
     public Emotion emotion(Input input, CallControl control) {
-        JsonNode result = call("preparation.emotion","CLASSIFY",emotionPrompt, input, control, 128);
+        JsonNode result = call("preparation.emotion","CLASSIFY",emotionPrompt, context(input), control, 128);
         fields(result, "emotion"); return Emotion.valueOf(text(result, "emotion"));
     }
     public Intent intent(Input input, CallControl control) {
@@ -60,10 +60,12 @@ final class DeepSeekPreparationModel implements PreparationModelPort {
     @Override public IntentRecognition recognizeIntent(Input input,CallControl control) {
         // Explicit legacy adapter inputs retain their old response contract.
         if(input.intentCandidates().isEmpty()) {
-            JsonNode result=call("preparation.intent","LEGACY",intentPrompt+"\n本请求未提供候选清单，兼容输出仅包含 intent 字段，值为 VIDEO_METRIC、DANMAKU_REPORT、KNOWLEDGE、OTHER、UNKNOWN。",input,control,128);
+            JsonNode result=call("preparation.intent-legacy","LEGACY",legacyIntentPrompt,context(input),control,128);
             fields(result,"intent");return new IntentRecognition(Intent.valueOf(text(result,"intent")),null,java.util.List.of(),java.util.List.of());
         }
-        JsonNode result=call("preparation.intent","CANDIDATES",intentPrompt,input,control,256);fields(result,"primary","related");
+        var payload = context(input);
+        payload.put("intentCandidates",input.intentCandidates().stream().map(CandidateView::new).toList());
+        JsonNode result=call("preparation.intent","CANDIDATES",intentPrompt,payload,control,256);fields(result,"primary","related");
         if(!result.path("related").isArray() || result.path("related").size()>4)throw new IllegalArgumentException("Invalid related goals");
         var related=new java.util.ArrayList<String>();
         for(var item:result.path("related")){if(!item.isTextual())throw new IllegalArgumentException("Invalid related goal");related.add(item.textValue());}
@@ -71,7 +73,22 @@ final class DeepSeekPreparationModel implements PreparationModelPort {
                 new IntentRecognition(Intent.UNKNOWN,text(result,"primary"),related,input.intentCandidates()));
     }
     public Understanding understand(Input input, CallControl control) {
-        JsonNode result = call("preparation.understanding","CLARIFICATION",understandingPrompt, input, control, config.preparationMaxTokens());
+        Specification candidate;
+        try {
+            candidate = TaskMeaning.defaults().resolve(input.query(), input.businessDate(), input.requestedAt(), input.memory());
+        } catch (AgentException ambiguous) {
+            if (!"AMBIGUOUS_ANALYSIS_SOURCES".equals(ambiguous.code())) throw ambiguous;
+            return clarification(input, new Specification("unclassified", Map.of(), Map.of()), true, control);
+        }
+        return clarification(input, candidate, false, control);
+    }
+    @Override
+    public Understanding clarification(Input input, Specification taskCandidate, boolean requiresClarification, CallControl control) {
+        var payload = context(input);
+        ObjectNode candidate = mapper.valueToTree(taskCandidate);
+        candidate.put("requiresClarification", requiresClarification);
+        payload.put("serverTaskCandidate", candidate);
+        JsonNode result = call("preparation.understanding","CLARIFICATION",understandingPrompt, payload, control, config.preparationMaxTokens());
         boolean structured=result.has("issue") || result.has("missingFields");
         if(structured)fields(result,"needsClarification","clarificationQuestion","conditions","rewrittenQuery","issue","missingFields");
         else fields(result, "needsClarification", "clarificationQuestion", "conditions", "rewrittenQuery");

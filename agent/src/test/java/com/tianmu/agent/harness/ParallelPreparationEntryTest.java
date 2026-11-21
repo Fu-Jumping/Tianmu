@@ -2,6 +2,7 @@ package com.tianmu.agent.harness;
 
 import com.tianmu.agent.core.AgentTypes.*;
 import com.tianmu.agent.core.PreparationTypes.*;
+import com.tianmu.agent.core.TaskTypes.Specification;
 import com.tianmu.agent.preparation.*;
 import com.tianmu.agent.runtime.*;
 import com.tianmu.agent.runtime.control.CallControl;
@@ -49,7 +50,13 @@ class ParallelPreparationEntryTest {
             void meet(Input input){inputs.add(input);try{barrier.await(2,TimeUnit.SECONDS);}catch(Exception e){throw new IllegalStateException(e);}}
             public Intent intent(Input i,CallControl c){meet(i);return Intent.VIDEO_METRIC;}
             public Emotion emotion(Input i,CallControl c){meet(i);return Emotion.NEGATIVE;}
-            public Understanding understand(Input i,CallControl c){meet(i);return accepted(i,i.query());}
+            @Override public Understanding clarification(Input input, Specification taskCandidate, boolean requiresClarification, CallControl control) {
+                assertEquals("video.metric", taskCandidate.type());
+                assertEquals(1001L, ((Number) taskCandidate.conditions().get("video_id")).longValue());
+                assertFalse(requiresClarification);
+                meet(input);
+                return accepted(input, input.query());
+            }
         },policy,f.harness,List.of(new MetricQueryReadiness()))) {
             var run=new RunState(new AccessScope("demo","alice",Set.of(1001L)),"查询视频1001昨天的弹幕数");
             var called=new AtomicInteger();

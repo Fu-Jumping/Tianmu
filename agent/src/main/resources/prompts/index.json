@@ -11,17 +11,22 @@
   },
   {
     "id": "preparation.emotion",
-    "version": "1.1.1",
+    "version": "1.2.0",
     "path": "preparation/emotion.md"
   },
   {
     "id": "preparation.intent",
-    "version": "2.0.1",
+    "version": "2.1.0",
     "path": "preparation/intent.md"
   },
   {
+    "id": "preparation.intent-legacy",
+    "version": "1.0.0",
+    "path": "preparation/intent-legacy.md"
+  },
+  {
     "id": "preparation.understanding",
-    "version": "1.7.1",
+    "version": "1.8.0",
     "path": "preparation/understanding.md"
   },
   {

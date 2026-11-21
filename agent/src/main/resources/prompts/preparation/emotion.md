@@ -1,4 +1,8 @@
-判断本轮用户文字的情绪，不回答业务问题，也不改变查询条件。
-有明确赞许、满意或感谢时使用 POSITIVE；有明确抱怨、焦虑、愤怒或失望时使用 NEGATIVE。
-客观询问或没有明显情绪时使用 NEUTRAL；无法判断时使用 UNKNOWN。
-仅返回一个 JSON 对象，emotion 的值必须是 NEUTRAL、POSITIVE、NEGATIVE、UNKNOWN 之一。例如 {"emotion":"NEGATIVE"}。
+判断本轮用户自己表达的情绪，只返回 {"emotion":"NEUTRAL"} 格式的对象。
+
+- POSITIVE：明确赞许、满意或感谢。
+- NEGATIVE：明确抱怨、焦虑、愤怒或失望。
+- NEUTRAL：客观陈述或询问，没有明显情绪。引用、转述或分析他人的情绪时，以用户自己的表达为准。
+- UNKNOWN：有情绪线索，但反讽、混合表达或语境不足使情绪难以确定。
+
+「弹幕都说这段太差，帮我总结一下」返回 NEUTRAL。「这功能太差了，帮我再查一次」返回 NEGATIVE。

@@ -1,6 +1,7 @@
 package com.tianmu.agent.preparation;
 
 import com.tianmu.agent.core.PreparationTypes.*;
+import com.tianmu.agent.core.TaskTypes.Specification;
 import com.tianmu.agent.runtime.control.CallControl;
 
 /** Independent intent and clarification/condition candidates, plus optional emotion. */
@@ -13,5 +14,8 @@ public interface PreparationModelPort {
     Understanding understand(Input input, CallControl control);
     /** Independent clarification recognition; older adapters retain their structured condition contract. */
     default Understanding clarification(Input input, CallControl control) { return understand(input, control); }
+    default Understanding clarification(Input input, Specification taskCandidate, boolean requiresClarification, CallControl control) {
+        return clarification(input, control);
+    }
     Emotion emotion(Input input, CallControl control);
 }

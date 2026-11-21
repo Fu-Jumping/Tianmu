@@ -552,11 +552,30 @@ class DeepSeekAdapterTest {
             assertThrows(IllegalArgumentException.class, () -> port.understand(input(), control()));
         }
     }
+    @Test void clarificationSendsTheHostTaskCandidate() throws Exception {
+        var port = new DeepSeekAdapters().deepSeekPreparation(client, properties, mapper, new PromptCatalog());
+        var lookup = new Specification("resource.lookup",
+                Map.of("selection_required", false, "report_reference_required", true), Map.of());
+        answer = request -> """
+                {"needsClarification":false,"clarificationQuestion":null,"conditions":{},"rewrittenQuery":null,"issue":"NONE","missingFields":[]}
+                """.strip();
+        assertFalse(port.clarification(input(), lookup, false, control()).needsClarification());
+        var messages = requests.get(0).path("messages");
+        var candidate = mapper.readTree(messages.get(1).path("content").asText()).path("serverTaskCandidate");
+        assertEquals("resource.lookup", candidate.path("type").asText());
+        assertEquals(mapper.valueToTree(lookup.conditions()), candidate.path("conditions"));
+        assertEquals(mapper.getNodeFactory().booleanNode(false), candidate.path("requiresClarification"));
+    }
+
     @Test void intentUsesIndependentStructuredModelRequestAndRejectsUnknownFields() {
         var port = new DeepSeekAdapters().deepSeekPreparation(client, properties, mapper, new PromptCatalog());
         answer = request -> "{\"intent\":\"VIDEO_METRIC\"}";
         assertEquals(Intent.VIDEO_METRIC, port.intent(input(), control()));
         assertEquals(properties.preparationModel(), requests.get(0).path("model").asText());
+        String instruction = requests.get(0).path("messages").get(0).path("content").asText();
+        assertTrue(instruction.contains("{\"intent\":\"VIDEO_METRIC\"}"));
+        assertFalse(instruction.contains("\"primary\""));
+        assertFalse(instruction.contains("\"related\""));
         assertFalse(requests.get(0).toString().contains("private-tenant"));
         assertFalse(requests.get(0).toString().contains("private-user"));
         for (String invalid : List.of("{\"intent\":\"ADMIN\"}", "{\"intent\":\"OTHER\",\"extra\":true}", "{\"intent\":7}")) {

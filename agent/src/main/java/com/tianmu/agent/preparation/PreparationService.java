@@ -152,7 +152,8 @@ public class PreparationService implements AutoCloseable {
         Instant intentEnd = deadline(run, runPolicy.intentTimeout());
         Instant emotionEnd = deadline(run, runPolicy.emotionTimeout());
         // All branches read the same immutable snapshot. Only this coordinator merges results.
-        Branch<Understanding> understanding = submit(run, "clarification", end, contextInput, c -> model.clarification(contextInput, c));
+        Branch<Understanding> understanding = submit(run, "clarification", end, contextInput,
+                c -> model.clarification(contextInput, specification, required.isPresent(), c));
         Branch<IntentRecognition> intent = submit(run, "intent", intentEnd, contextInput,
                 c -> IntentCandidateCatalog.validate(contextInput,model.recognizeIntent(contextInput,c)));
         if (!runPolicy.emotionEnabled()) skipEmotion(run, "CONFIG_DISABLED");
