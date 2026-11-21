@@ -56,7 +56,18 @@ public final class AgentTypes {
         }
     }
     public record CapabilitySummary(String name, String description) {}
-    public record CapabilityDirectory(List<CapabilitySummary> publicTools, List<CapabilitySummary> skills) {
+    public record ToolOrder(List<String> publicTools, List<String> skillTools) {
+        public ToolOrder {
+            publicTools = List.copyOf(publicTools);
+            skillTools = List.copyOf(skillTools);
+        }
+        public static ToolOrder empty() { return new ToolOrder(List.of(), List.of()); }
+    }
+    public record CapabilityDirectory(List<CapabilitySummary> publicTools, List<CapabilitySummary> skills,
+                                      @com.fasterxml.jackson.annotation.JsonInclude(com.fasterxml.jackson.annotation.JsonInclude.Include.NON_NULL) ToolOrder toolOrder) {
+        public CapabilityDirectory(List<CapabilitySummary> publicTools, List<CapabilitySummary> skills) {
+            this(publicTools, skills, null);
+        }
         public CapabilityDirectory {
             publicTools = List.copyOf(publicTools);
             skills = List.copyOf(skills);

@@ -2,12 +2,14 @@ package com.tianmu.agent.model.deepseek;
 
 import com.tianmu.agent.core.AgentException;
 import com.tianmu.agent.core.AgentTypes.*;
+import com.tianmu.agent.core.ExecutionPolicySnapshot.Context;
 import com.tianmu.agent.model.ModelPort;
 import com.tianmu.agent.prompt.PromptCatalog;
 import com.tianmu.agent.runtime.control.*;
 import com.fasterxml.jackson.databind.*;
 import java.time.*;
 import java.util.*;
+import java.util.stream.Stream;
 import static com.tianmu.agent.model.deepseek.StructuredModelOutput.*;
 
 public final class DeepSeekHarnessModel implements ModelPort {
@@ -35,11 +37,10 @@ public final class DeepSeekHarnessModel implements ModelPort {
             case "ask_clarification" -> "当前可读历史已检索结束，没有找到可验证的报告引用。请用户提供报告链接，不猜测报告编号。";
             default -> "";
         };
-        boolean legacy=client.legacyHarnessProjection(control);
+        String projection = client.harnessProjection(control);
+        boolean legacy=Context.LEGACY_PROJECTION.equals(projection);
         String instruction=legacy && !action.isEmpty()?systemPrompt+"\n"+action:systemPrompt;
-        var publicNames=context.capabilities().publicTools().stream().map(CapabilitySummary::name).collect(java.util.stream.Collectors.toSet());
-        var tools=legacy?context.availableTools():context.availableTools().stream()
-                .sorted(Comparator.comparing((ToolDefinition tool)->!publicNames.contains(tool.name())).thenComparing(ToolDefinition::name)).toList();
+        var tools = toolDefinitions(context, projection);
         JsonNode result=prompts.trace("harness.system",context.finalizing()?"FINALIZE":requiredTool==null?"NATIVE_TOOLS":"RESOURCE_REQUIRED",instruction,List.of(),
                 ()->client.completeHarness(config.harnessModel(),client.harnessMessages(instruction,context,control,action),tools,config.harnessMaxTokens(),control,requiredTool));
         try {
@@ -76,5 +77,24 @@ public final class DeepSeekHarnessModel implements ModelPort {
                 default -> throw new IllegalArgumentException("Unknown decision");
             };
         } catch (RuntimeException e) { throw new AgentException("INVALID_DECISION", "Invalid structured model decision"); }
+    }
+
+    private List<ToolDefinition> toolDefinitions(ModelContext context, String projection) {
+        var available = context.availableTools();
+        if (Context.LEGACY_PROJECTION.equals(projection)) return available;
+        var order = context.capabilities().toolOrder();
+        if (Context.CURRENT_PROJECTION.equals(projection) && order != null) {
+            var byName = new LinkedHashMap<String, ToolDefinition>();
+            available.forEach(tool -> byName.put(tool.name(), tool));
+            var ordered = new ArrayList<ToolDefinition>();
+            Stream.concat(order.publicTools().stream(), order.skillTools().stream())
+                    .map(byName::remove).filter(Objects::nonNull).forEach(ordered::add);
+            ordered.addAll(byName.values());
+            return ordered;
+        }
+        var publicNames = new HashSet<String>();
+        context.capabilities().publicTools().forEach(tool -> publicNames.add(tool.name()));
+        return available.stream().sorted(Comparator.comparing((ToolDefinition tool) -> !publicNames.contains(tool.name()))
+                .thenComparing(ToolDefinition::name)).toList();
     }
 }

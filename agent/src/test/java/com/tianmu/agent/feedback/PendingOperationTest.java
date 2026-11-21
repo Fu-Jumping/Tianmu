@@ -34,6 +34,26 @@ class PendingOperationTest {
         assertEquals(comments,restored.execution().exchanges().get(0).result());assertEquals(danmaku,restored.execution().exchanges().get(1).result());
         r.cancel();restored.cancel();
     }
+    @Test void restoredToolOrderKeepsExistingPositionsAndDropsUnavailableTools() throws Exception {
+        var run = run();
+        var publicTool = new ToolDefinition("read_skill", "Activate a skill", Map.of("type", "object"));
+        var prior = new ToolDefinition("read_report", "Read a report", Map.of("type", "object"));
+        var revoked = new ToolDefinition("read_result", "Read evidence", Map.of("type", "object"));
+        var added = new ToolDefinition("query_video_metrics", "Read metrics", Map.of("type", "object"));
+        var directory = new CapabilityDirectory(List.of(new CapabilitySummary(publicTool.name(), publicTool.description())), List.of());
+        run.execution().orderTools(List.of(prior, revoked, publicTool), directory);
+        waitOn(run);
+        var json = new com.fasterxml.jackson.databind.ObjectMapper().findAndRegisterModules();
+        var frame = json.readValue(json.writeValueAsBytes(run.continuation()), PendingOperation.Continuation.class);
+        var restored = new ExecutionState();
+        restored.restore(frame);
+        assertEquals(List.of(publicTool.name()), restored.toolOrder().publicTools());
+        assertEquals(List.of(prior.name(), revoked.name()), restored.toolOrder().skillTools());
+        var order = restored.orderTools(List.of(added, publicTool, prior), directory).toolOrder();
+        assertEquals(List.of(publicTool.name()), order.publicTools());
+        assertEquals(List.of(prior.name(), added.name()), order.skillTools());
+        run.cancel();
+    }
     @Test void harnessResumptionKeepsTheOriginalTraceInsteadOfRejectingANewTraceId(){
         try(var provider=io.opentelemetry.sdk.trace.SdkTracerProvider.builder().build()){
             var tracer=provider.get("test");var hooks=new com.tianmu.agent.harness.hook.HookDispatcher(List.of(),tracer);

@@ -82,6 +82,29 @@ class HarnessLifecycleTest {
     }
     private long count(List<HookEvent> events, HookPoint point) { return events.stream().filter(e -> e.point() == point).count(); }
 
+    @Test void openingAnotherSkillAppendsToolsToTheRunsModelDirectory() {
+        try (var fixture = new Fixture()) {
+            var orders = new ArrayList<ToolOrder>();
+            var run = fixture.run();
+            fixture.execute(run, context -> {
+                orders.add(context.capabilities().toolOrder());
+                return switch (orders.size()) {
+                    case 1 -> new Decision(Kind.TOOL, new ToolCall("read_skill", Map.of("name", "resource-discovery")), null, null);
+                    case 2 -> new Decision(Kind.TOOL, new ToolCall("read_skill", Map.of("name", "video-metrics")), null, null);
+                    default -> Decision.clarify("接下来要查哪个视频？");
+                };
+            });
+            assertEquals(Status.NEEDS_INPUT, run.snapshot().status(), () -> "Run error: " + run.snapshot().errorCode());
+            assertEquals(3, orders.size());
+            assertTrue(orders.get(0).skillTools().isEmpty());
+            assertTrue(orders.get(1).skillTools().contains("read_report"));
+            for (var order : orders) assertEquals(orders.get(0).publicTools(), order.publicTools());
+            var expected = new ArrayList<>(orders.get(1).skillTools());
+            expected.add("query_video_metrics");
+            assertEquals(expected, orders.get(2).skillTools());
+        }
+    }
+
     @Test void lifecycleAndParentTreeAreComplete() {
         List<HookEvent> events = new CopyOnWriteArrayList<>();
         try (Fixture fixture = new Fixture(recording(events))) {

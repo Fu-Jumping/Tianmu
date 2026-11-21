@@ -37,8 +37,11 @@ final class DeepSeekPreparationModel implements PreparationModelPort {
     }
     private Map<String, Object> context(Input input) {
         Map<String, Object> payload = new LinkedHashMap<>();
-        payload.put("memory", input.memory()); payload.put("query", input.query()); payload.put("businessDate", input.businessDate().toString());
-        payload.put("requestedAt",input.requestedAt().toString());
+        JsonNode memory = mapper.valueToTree(input.memory());
+        memory.path("recent").forEach(message -> ((ObjectNode) message).remove("at"));
+        memory.path("persistent").forEach(item -> ((ObjectNode) item).remove("expiresAt"));
+        payload.put("memory", memory);
+        payload.put("query", input.query());
         return payload;
     }
     private JsonNode call(String id,String variant,String prompt, Map<String, Object> payload, CallControl control, int tokens) {
@@ -47,7 +50,7 @@ final class DeepSeekPreparationModel implements PreparationModelPort {
     @Override public String revision() {
         try {
             return java.util.HexFormat.of().formatHex(java.security.MessageDigest.getInstance("SHA-256").digest(mapper.writeValueAsBytes(
-                java.util.List.of("chat-native-v1",config.baseUrl().toString(),config.preparationModel(),config.preparationMaxTokens(),emotionPrompt,understandingPrompt,intentPrompt,legacyIntentPrompt))));
+                java.util.List.of("chat-native-v1","preparation-input-v3",config.baseUrl().toString(),config.preparationModel(),config.preparationMaxTokens(),emotionPrompt,understandingPrompt,intentPrompt,legacyIntentPrompt))));
         } catch(Exception error){throw new IllegalStateException("Cannot fingerprint preparation model",error);}
     }
     public Emotion emotion(Input input, CallControl control) {
@@ -63,8 +66,9 @@ final class DeepSeekPreparationModel implements PreparationModelPort {
             JsonNode result=call("preparation.intent-legacy","LEGACY",legacyIntentPrompt,context(input),control,128);
             fields(result,"intent");return new IntentRecognition(Intent.valueOf(text(result,"intent")),null,java.util.List.of(),java.util.List.of());
         }
-        var payload = context(input);
-        payload.put("intentCandidates",input.intentCandidates().stream().map(CandidateView::new).toList());
+        var payload = new LinkedHashMap<String, Object>();
+        payload.put("intentCandidates", input.intentCandidates().stream().map(CandidateView::new).toList());
+        payload.putAll(context(input));
         JsonNode result=call("preparation.intent","CANDIDATES",intentPrompt,payload,control,256);fields(result,"primary","related");
         if(!result.path("related").isArray() || result.path("related").size()>4)throw new IllegalArgumentException("Invalid related goals");
         var related=new java.util.ArrayList<String>();
@@ -85,6 +89,7 @@ final class DeepSeekPreparationModel implements PreparationModelPort {
     @Override
     public Understanding clarification(Input input, Specification taskCandidate, boolean requiresClarification, CallControl control) {
         var payload = context(input);
+        payload.put("businessDate", input.businessDate().toString());
         ObjectNode candidate = mapper.valueToTree(taskCandidate);
         candidate.put("requiresClarification", requiresClarification);
         payload.put("serverTaskCandidate", candidate);

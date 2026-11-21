@@ -3,6 +3,7 @@ package com.tianmu.agent.runtime;
 import com.tianmu.agent.core.StopReason;
 
 import com.tianmu.agent.core.AgentException;
+import com.tianmu.agent.core.ExecutionPolicySnapshot;
 import com.tianmu.agent.core.AgentTypes.*;
 import com.tianmu.agent.model.ModelPort;
 import com.tianmu.agent.tool.ToolDispatcher;
@@ -140,7 +141,11 @@ public class AgentRuntime {
                             finalizing ? List.of() : available, remaining, finalizing,
                             finalizing ? finalizeDirective : "", run.preparedRequest(), run.task(), run.memory(),run.execution().exchanges(),
                             taskPolicy.project(policyInput(run))));
-                    return context.withCapabilities(tools.capabilities(run,finalizing ? available : context.availableTools()));
+                    var capabilities = tools.capabilities(run, finalizing ? available : context.availableTools());
+                    var policy = run.executionPolicy();
+                    if (!finalizing && (policy == null || ExecutionPolicySnapshot.Context.CURRENT_PROJECTION.equals(policy.context().projectionVersion())))
+                        capabilities = run.execution().orderTools(context.availableTools(), capabilities);
+                    return context.withCapabilities(capabilities);
                 });
     }
     private Decision decide(RunState run, ModelContext context) {

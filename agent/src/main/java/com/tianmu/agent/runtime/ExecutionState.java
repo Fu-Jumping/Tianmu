@@ -1,5 +1,9 @@
 package com.tianmu.agent.runtime;
 
+import com.tianmu.agent.core.AgentTypes.CapabilityDirectory;
+import com.tianmu.agent.core.AgentTypes.CapabilitySummary;
+import com.tianmu.agent.core.AgentTypes.ToolDefinition;
+import com.tianmu.agent.core.AgentTypes.ToolOrder;
 import com.tianmu.agent.core.AgentTypes.ToolResult;
 import com.tianmu.agent.runtime.store.*;
 import java.util.*;
@@ -7,6 +11,7 @@ import java.util.*;
 /** Host-owned mutable execution data. Tools receive a restricted facade instead. */
 public final class ExecutionState {
     private final Set<String> activeSkills = new HashSet<>();
+    private ToolOrder toolOrder;
     private final List<ToolResult> observations = new ArrayList<>();
     private final List<com.tianmu.agent.core.AgentTypes.ToolExchange> exchanges = new ArrayList<>();
     private final EvidenceStore evidence;
@@ -18,6 +23,25 @@ public final class ExecutionState {
     public ExecutionState(EvidenceStore evidence) { this.evidence = evidence; }
     public synchronized Set<String> activeSkills() { return Set.copyOf(activeSkills); }
     public synchronized void activateSkill(String name) { activeSkills.add(name); }
+    public synchronized ToolOrder toolOrder() { return toolOrder; }
+    public synchronized CapabilityDirectory orderTools(List<ToolDefinition> available, CapabilityDirectory directory) {
+        Set<String> publicNames = new HashSet<>();
+        directory.publicTools().forEach(tool -> publicNames.add(tool.name()));
+        var publicTools = new TreeSet<String>();
+        var skillTools = new TreeSet<String>();
+        for (var tool : available)
+            (publicNames.contains(tool.name()) ? publicTools : skillTools).add(tool.name());
+        ToolOrder previous = toolOrder == null ? ToolOrder.empty() : toolOrder;
+        toolOrder = new ToolOrder(retainAndAppend(previous.publicTools(), publicTools),
+                retainAndAppend(previous.skillTools(), skillTools));
+        return new CapabilityDirectory(directory.publicTools(), directory.skills(), toolOrder);
+    }
+    private static List<String> retainAndAppend(List<String> previous, Set<String> available) {
+        var ordered = new LinkedHashSet<>(previous);
+        ordered.retainAll(available);
+        ordered.addAll(available);
+        return List.copyOf(ordered);
+    }
     public synchronized List<ToolResult> observations() { return List.copyOf(observations); }
     public synchronized void observe(ToolResult value) { observations.add(value); }
     public synchronized void observe(com.tianmu.agent.core.AgentTypes.ToolCall call,ToolResult value) {
@@ -26,6 +50,7 @@ public final class ExecutionState {
     public synchronized List<com.tianmu.agent.core.AgentTypes.ToolExchange> exchanges() { return List.copyOf(exchanges); }
     public synchronized void restore(com.tianmu.agent.core.PendingOperation.Continuation continuation){
         if(!exchanges.isEmpty())throw new IllegalStateException("Execution was already restored");
+        toolOrder = continuation.toolOrder();
         activeSkills.addAll(continuation.skills());exchanges.addAll(continuation.exchanges());continuation.exchanges().forEach(e->observations.add(e.result()));
         continuation.exchanges().forEach(e->restoreReport(e.result()));
     }

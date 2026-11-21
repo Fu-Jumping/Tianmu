@@ -40,7 +40,7 @@ public final class HarnessContextBuilder {
         ObjectNode working=json.createObjectNode();working.set("tools",json.valueToTree(context.availableTools()));
         working.set("results",json.valueToTree(context.observations()));
         int schemas=bounds.deduplicateSchemas(working);
-        if(ExecutionPolicySnapshot.Context.CURRENT_PROJECTION.equals(projection))
+        if(ExecutionPolicySnapshot.Context.usesDateTail(projection))
             schemas+=projectSkillResults((ArrayNode)working.get("results"));
         int compacted=new ToolResultProjector(json).compact((ArrayNode)working.get("results"),context.availableTools().stream().anyMatch(t->t.name().equals("read_result")));
         TraceAttributes.apply(Span.current(),Map.of("context.results_compacted",compacted,"context.compaction_segments",memory.compaction().size()));
@@ -84,7 +84,7 @@ public final class HarnessContextBuilder {
     private NativeContextProjector.Request assemble(String instruction,ModelContext context,List<MemoryTypes.Message> history,
             ObjectNode working,List<ToolCall> recordedCalls,String requiredAction,String projection) {
         boolean legacy=ExecutionPolicySnapshot.Context.LEGACY_PROJECTION.equals(projection);
-        boolean dateAtTail=ExecutionPolicySnapshot.Context.CURRENT_PROJECTION.equals(projection);
+        boolean dateAtTail=ExecutionPolicySnapshot.Context.usesDateTail(projection);
         List<Map<String,Object>> out=new ArrayList<>();
         for(var prior:history) if(Set.of("user","assistant").contains(prior.role())) out.add(message(prior.role(),prior.text()));
         var parts=new ArrayList<ContextEnvelope.Part>();

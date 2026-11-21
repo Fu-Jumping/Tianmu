@@ -15,7 +15,11 @@ public record ExecutionPolicySnapshot(String schemaVersion,String semanticsVersi
             String envelopeVersion,String projectionVersion,String slotPolicyVersion) {
         public static final String LEGACY_PROJECTION = "chat_native_v1";
         public static final String PREVIOUS_PROJECTION = "chat_native_v2";
-        public static final String CURRENT_PROJECTION = "chat_native_v3";
+        public static final String DATE_TAIL_PROJECTION = "chat_native_v3";
+        public static final String CURRENT_PROJECTION = "chat_native_v4";
+        public static boolean usesDateTail(String projection) {
+            return DATE_TAIL_PROJECTION.equals(projection) || CURRENT_PROJECTION.equals(projection);
+        }
     }
     public record Business(long reportWindowMillis,String conditionsVersion,String completionVersion,Map<String,String> resources) {
         public Business { resources=Map.copyOf(resources); }
@@ -42,7 +46,7 @@ public record ExecutionPolicySnapshot(String schemaVersion,String semanticsVersi
                 || !"analysis-turns-v1".equals(foreground.turnRuleVersion()) || !"1.0".equals(context.envelopeVersion())
                 || !(Context.LEGACY_PROJECTION.equals(context.projectionVersion())
                      || Context.PREVIOUS_PROJECTION.equals(context.projectionVersion())
-                     || Context.CURRENT_PROJECTION.equals(context.projectionVersion()))
+                     || Context.usesDateTail(context.projectionVersion()))
                 || !"slots-v1".equals(context.slotPolicyVersion())
                 || !"conditions-v1".equals(business.conditionsVersion()) || !"completion-v1".equals(business.completionVersion())
                 || !"chat-native-v1".equals(model.adapterVersion()))throw new AgentException("POLICY_VERSION_UNAVAILABLE","Execution policy version is unavailable");

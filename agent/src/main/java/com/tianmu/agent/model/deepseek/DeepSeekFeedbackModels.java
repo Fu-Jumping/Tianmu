@@ -27,15 +27,25 @@ public final class DeepSeekFeedbackModels implements FeedbackModels {
         payload.put("text_limits",Map.of("title",100,"observation",2400,"recommendation",1200));
         payload.put("target_lengths",Map.of("observation",800,"recommendation",400));
         payload.put("max_topics",10);
+        putVideoContext(payload, input.video());
         if(input.kind()==FeedbackAnalysis.WorkKind.CLASSIFY && !input.knownTopics().isEmpty())payload.put("known_topics",input.knownTopics().stream().map(t->Map.of(
                 "key",t.key(),"title",t.title(),"messages",t.messages())).toList());
         payload.put("groups",input.groups().stream().map(g->{
             var m=new LinkedHashMap<String,Object>();m.put("id",g.id());m.put("source",g.source());m.put("text",g.text());m.put("reply_context",g.replyContext());
             m.put("author",g.author());m.put("playback_ms",g.playbackMs());m.put("count",g.messages());return m;
         }).toList());
-        if(input.video()!=null)payload.put("video",Map.of("summary",input.video().summary(),"moments",input.video().moments(),"sampledAtMs",input.video().sampledAtMs(),"coverage",input.video().coverage(),"transcript",input.video().transcript()));
         var body=complete(input,payload,control);
         return parse(body,10);
+    }
+    private static void putVideoContext(Map<String, Object> payload, VideoContent.Facts video) {
+        if (video == null) return;
+        var context = new LinkedHashMap<String, Object>();
+        context.put("summary", video.summary());
+        context.put("moments", video.moments());
+        context.put("sampledAtMs", video.sampledAtMs());
+        context.put("coverage", video.coverage());
+        context.put("transcript", video.transcript());
+        payload.put("video", context);
     }
     private List<Proposal> parse(com.fasterxml.jackson.databind.JsonNode body,int maxTopics){
         return parse(body,maxTopics,false);
@@ -201,6 +211,7 @@ public final class DeepSeekFeedbackModels implements FeedbackModels {
         var payload=new LinkedHashMap<String,Object>();payload.put("kind",input.kind());
         var childIds=new LinkedHashMap<String,String>();
         int max=input.kind()==FeedbackAnalysis.WorkKind.MERGE?Math.min(FeedbackSynthesis.MAX_TOPICS,input.children().size()):10;payload.put("max_topics",max);
+        putVideoContext(payload, input.video());
         if(input.kind()==FeedbackAnalysis.WorkKind.CLASSIFY)payload.put("groups",input.groups().stream().map(g->FeedbackModelProjection.group(g,json)).toList());
         else {
             var material=FeedbackSynthesis.material(input.children());
@@ -211,7 +222,6 @@ public final class DeepSeekFeedbackModels implements FeedbackModels {
                 var bindings=new LinkedHashMap<String,List<String>>();childIds.forEach((alias,id)->bindings.put(alias,input.children().stream().filter(t->t.id().equals(id)).findFirst().orElseThrow().members()));payload.put("child_groups",bindings);
             }
         }
-        if(input.video()!=null)payload.put("video",Map.of("summary",input.video().summary(),"moments",input.video().moments(),"sampledAtMs",input.video().sampledAtMs(),"coverage",input.video().coverage(),"transcript",input.video().transcript()));
         if(input.kind()==FeedbackAnalysis.WorkKind.CLASSIFY && !input.knownTopics().isEmpty())
             payload.put("topic_directory",input.knownTopics().stream().map(t->Map.of("key",t.key(),"title",t.title())).toList());
         if(input.correction()!=null){

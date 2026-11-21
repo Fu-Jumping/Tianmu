@@ -128,6 +128,37 @@ class DeepSeekAdapterTest {
             answer=request->response;assertThrows(IllegalArgumentException.class,()->model.recognizeIntent(candidateInput(),control()));
         }
     }
+    @Test void intentCandidateListRemainsInTheSharedPrefixWhenQueryAndMemoryChange(TestReporter reporter) throws Exception {
+        var model = new DeepSeekPreparationModel(client, properties, mapper, new PromptCatalog());
+        var input = candidateInput();
+        answer = request -> "{\"primary\":\"video-metrics\",\"related\":[]}";
+        model.recognizeIntent(input, control());
+        var nextMemory = new MemoryTypes.View(2, "刚查过视频 1001 的弹幕数。", List.of(), false);
+        model.recognizeIntent(new Input("查今天的弹幕数", input.businessDate(), input.scope(),
+                nextMemory, input.requestedAt(), input.intentCandidates()), control());
+
+        var previousOrder = new ArrayList<String>();
+        var candidateFirst = new ArrayList<String>();
+        for (var request : requests) {
+            String content = request.path("messages").get(1).path("content").asText();
+            var payload = mapper.readTree(content);
+            var baseline = mapper.createObjectNode();
+            for (String key : List.of("memory", "query", "intentCandidates")) {
+                baseline.set(key, payload.get(key));
+            }
+            assertEquals(payload, baseline);
+            previousOrder.add(mapper.writeValueAsString(baseline));
+            candidateFirst.add(content);
+        }
+        assertEquals(requests.get(0).path("messages").get(0), requests.get(1).path("messages").get(0));
+        String candidates = mapper.readTree(candidateFirst.get(0)).path("intentCandidates").toString();
+        int candidatePrefixBytes = ("{\"intentCandidates\":" + candidates).getBytes(StandardCharsets.UTF_8).length;
+        int before = Arrays.mismatch(previousOrder.get(0).getBytes(StandardCharsets.UTF_8), previousOrder.get(1).getBytes(StandardCharsets.UTF_8));
+        int after = Arrays.mismatch(candidateFirst.get(0).getBytes(StandardCharsets.UTF_8), candidateFirst.get(1).getBytes(StandardCharsets.UTF_8));
+        assertTrue(before < candidatePrefixBytes);
+        assertTrue(after >= candidatePrefixBytes);
+        reporter.publishEntry("intentCacheUserPrefixBytes", before + " -> " + after);
+    }
     ModelContext context() { return new ModelContext(input().query(), input().businessDate(), input().scope(), Set.of(), List.of(), List.of(), 6); }
     @Test void plainAnswerRetainsAllMaterialEvidenceReferences(){
         answer=request->"这里可以这样理解。";
@@ -270,6 +301,31 @@ class DeepSeekAdapterTest {
         assertTrue(requests.get(0).path("parallel_tool_calls").asBoolean());
         client.completeHarness(properties.harnessModel(),List.of(Map.of("role","user","content","prepare")),tools.subList(0,1),128,control());
         assertFalse(requests.get(1).path("parallel_tool_calls").asBoolean());
+    }
+    @Test void nativeToolArrayPreservesPreviouslyDisclosedToolsBeforeNewTools() {
+        var catalog = new com.tianmu.agent.tool.ToolCatalog().all();
+        var common = catalog.get("read_skill");
+        var first = catalog.get("read_report");
+        var added = catalog.get("query_video_metrics");
+        var model = new DeepSeekHarnessModel(client, properties, mapper, new PromptCatalog());
+        var input = input();
+        var context = new ModelContext("你好", input.businessDate(), input.scope(), Set.of(), List.of(),
+                List.of(added, first, common), 3)
+                .withCapabilities(new CapabilityDirectory(List.of(new CapabilitySummary(common.name(), common.description())),
+                        List.of(), new ToolOrder(List.of(common.name()), List.of(first.name(), added.name()))));
+        answer = request -> "你好。";
+        var oldPolicy = new ExecutionPolicySnapshot.Context(98304, 16384, 4, 8192, "1.0",
+                ExecutionPolicySnapshot.Context.DATE_TAIL_PROJECTION, "slots-v1");
+        model.decide(context, control().withContextPolicy(oldPolicy));
+        model.decide(context, control());
+        var oldTools = requests.get(0).path("tools");
+        var newTools = requests.get(1).path("tools");
+        assertEquals(oldTools.get(0), newTools.get(0));
+        assertEquals(oldTools.get(1), newTools.get(2));
+        assertEquals(oldTools.get(2), newTools.get(1));
+        assertEquals("read_report", newTools.get(1).path("function").path("name").asText());
+        assertEquals("query_video_metrics", newTools.get(2).path("function").path("name").asText());
+        assertEquals(requests.get(0).path("messages"), requests.get(1).path("messages"));
     }
     @Test void requiredResourceReadsReachTheProviderAsRequiredAndReleaseAfterTheRead(){
         var tools=nativeContext(List.of(),List.of()).availableTools();
@@ -457,6 +513,32 @@ class DeepSeekAdapterTest {
         assertFalse(nativeMessages.toString().contains("oldoldold"));
         assertFalse(memory.truncated()); assertEquals(6000, memory.olderSummary().length());
     }
+    @Test void feedbackRequestsSendSharedVideoContextBeforeBatchSpecificData() throws Exception {
+        var models = new DeepSeekFeedbackModels(client, properties, mapper, new PromptCatalog());
+        var video = new com.tianmu.agent.core.VideoContent.Facts("video-content-v1", 1001, "fixture", 0, 10000,
+                "讲解者演示基础操作", List.of(new com.tianmu.agent.core.VideoContent.Moment(1000, "切换到近景")),
+                "先看第一步", "SAMPLED_FRAMES_AND_AUDIO_TRANSCRIPT", List.of(1000L), "fixture", Instant.EPOCH);
+        var group = new com.tianmu.agent.feedback.FeedbackModels.Group("G1", com.tianmu.agent.core.FeedbackAnalysis.Source.DANMAKU,
+                "希望第一步讲慢一点", "", false, 1000L, 1, List.of("D:1"));
+        var input = new com.tianmu.agent.feedback.FeedbackModels.Input(com.tianmu.agent.core.FeedbackAnalysis.WorkKind.CLASSIFY,
+                List.of(group), List.of(), video, null, List.of(new com.tianmu.agent.feedback.FeedbackModels.KnownTopic("T1", "教学节奏", 1)));
+        answer = request -> """
+                {"topics":[{"key":"T1","title":"教学节奏","observation":"希望第一步放慢。","recommendation":"可拆解演示。"}],"assignments":{"G1":"T1"}}
+                """.strip();
+        assertEquals(List.of("G1"), models.analyze(input, control()).get(0).members());
+        assertEquals(List.of("G1"), models.analyzePipeline(input, control()).get(0).members());
+        var legacy = mapper.readTree(requests.get(0).path("messages").get(1).path("content").asText());
+        var pipeline = mapper.readTree(requests.get(1).path("messages").get(1).path("content").asText());
+        var legacyKeys = new ArrayList<String>();
+        var pipelineKeys = new ArrayList<String>();
+        legacy.fieldNames().forEachRemaining(legacyKeys::add);
+        pipeline.fieldNames().forEachRemaining(pipelineKeys::add);
+        assertEquals(List.of("kind", "text_limits", "target_lengths", "max_topics", "video", "known_topics", "groups"), legacyKeys);
+        assertEquals(List.of("kind", "max_topics", "video", "groups", "topic_directory"), pipelineKeys);
+        assertEquals(legacy.path("video"), pipeline.path("video"));
+        assertEquals(video.transcript(), pipeline.path("video").path("transcript").asText());
+    }
+
     @Test void modelTraceCapturesActualMessagesProviderResponseAndReportedUsageWithoutCredentials() throws Exception {
         var exported = new CopyOnWriteArrayList<io.opentelemetry.sdk.trace.data.SpanData>();
         var exporter = new io.opentelemetry.sdk.trace.export.SpanExporter() {
@@ -565,6 +647,45 @@ class DeepSeekAdapterTest {
         assertEquals("resource.lookup", candidate.path("type").asText());
         assertEquals(mapper.valueToTree(lookup.conditions()), candidate.path("conditions"));
         assertEquals(mapper.getNodeFactory().booleanNode(false), candidate.path("requiresClarification"));
+    }
+
+    @Test void preparationSendsBusinessDatesOnlyForClarificationAndOmitsBookkeepingTimestamps() throws Exception {
+        var model = new DeepSeekPreparationModel(client, properties, mapper, new PromptCatalog());
+        var original = candidateInput();
+        var message = new MemoryTypes.Message(UUID.randomUUID(), UUID.randomUUID(), 1, "user",
+                "查视频 1001 的弹幕", original.requestedAt().minusSeconds(60));
+        var item = new MemoryTypes.Persistent(UUID.randomUUID(), 1, "user", "test", "preference",
+                "用中文回答", List.of(), original.requestedAt().plusSeconds(60));
+        var memory = new MemoryTypes.View(1, "", List.of(message), false, null, null, List.of(item));
+        var input = new Input(original.query(), original.businessDate(), original.scope(), memory,
+                original.requestedAt(), original.intentCandidates());
+        var conditions = Map.<String, Object>of("video_id", 1001, "date", "2026-10-20", "metric", "bullet_count");
+        var task = new Specification("video.metric", conditions, Map.of());
+
+        answer = request -> "{\"primary\":\"video-metrics\",\"related\":[]}";
+        model.recognizeIntent(input, control());
+        answer = request -> "{\"emotion\":\"NEUTRAL\"}";
+        model.emotion(input, control());
+        answer = request -> "{\"needsClarification\":false,\"clarificationQuestion\":null,\"conditions\":{},\"rewrittenQuery\":null}";
+        model.clarification(input, task, false, control());
+
+        assertEquals(3, requests.size());
+        for (int i = 0; i < requests.size(); i++) {
+            var payload = mapper.readTree(requests.get(i).path("messages").get(1).path("content").asText());
+            assertFalse(payload.has("requestedAt"));
+            var recent = payload.path("memory").path("recent").get(0);
+            assertEquals(message.text(), recent.path("text").asText());
+            assertFalse(recent.has("at"));
+            var persistent = payload.path("memory").path("persistent").get(0);
+            assertEquals(item.text(), persistent.path("text").asText());
+            assertFalse(persistent.has("expiresAt"));
+            if (i < 2) {
+                assertFalse(payload.has("businessDate"));
+            } else {
+                assertEquals(input.businessDate().toString(), payload.path("businessDate").asText());
+                assertEquals(mapper.valueToTree(conditions), payload.path("serverTaskCandidate").path("conditions"));
+            }
+        }
     }
 
     @Test void intentUsesIndependentStructuredModelRequestAndRejectsUnknownFields() {

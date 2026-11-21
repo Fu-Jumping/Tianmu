@@ -174,7 +174,7 @@ public class RunState implements EvidenceContext {
         checkpoint();if(status!=Status.RUNNING || pending.deadline().isAfter(deadline))throw new IllegalStateException("Invalid operation wait");
         var span=io.opentelemetry.api.trace.Span.current().getSpanContext();
         String traceParent=span.isValid()?"00-"+span.getTraceId()+"-"+span.getSpanId()+"-"+span.getTraceFlags().asHex():null;
-        operation=pending;continuation=new com.tianmu.agent.core.PendingOperation.Continuation(pending,execution.activeSkills(),execution.exchanges(),memory.withPersistent(List.of()).withCompaction(List.of()),modelBudget.snapshot(),traceParent,executionPolicy==null?null:executionPolicy.contentHash());
+        operation=pending;continuation=new com.tianmu.agent.core.PendingOperation.Continuation(pending,execution.activeSkills(),execution.exchanges(),memory.withPersistent(List.of()).withCompaction(List.of()),modelBudget.snapshot(),traceParent,executionPolicy==null?null:executionPolicy.contentHash(),execution.toolOrder());
         status=Status.WAITING_OPERATION;
         try{backend.save(this);}catch(RuntimeException failure){status=Status.RUNNING;operation=null;continuation=null;throw failure;}
         emit("PROGRESS",Map.of("stage","waiting_operation","operation_id",pending.id().toString()));

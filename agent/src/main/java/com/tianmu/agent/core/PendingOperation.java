@@ -1,6 +1,7 @@
 package com.tianmu.agent.core;
 
 import com.tianmu.agent.core.AgentTypes.ToolExchange;
+import com.tianmu.agent.core.AgentTypes.ToolOrder;
 import java.time.Instant;
 import java.util.*;
 
@@ -16,7 +17,11 @@ public record PendingOperation(UUID id,String kind,Instant deadline) {
         return new PendingOperation(id,kind,operationDeadline.isBefore(runDeadline)?operationDeadline:runDeadline);
     }
     public record Budget(long limit,long reservation,long charged,long reported,long unknown,boolean exhausted) {}
-    public record Continuation(PendingOperation operation,Set<String> skills,List<ToolExchange> exchanges,MemoryTypes.View memory,Budget budget,String traceParent, @com.fasterxml.jackson.annotation.JsonInclude(com.fasterxml.jackson.annotation.JsonInclude.Include.NON_NULL) String policyHash) {
+    public record Continuation(PendingOperation operation,Set<String> skills,List<ToolExchange> exchanges,MemoryTypes.View memory,Budget budget,String traceParent, @com.fasterxml.jackson.annotation.JsonInclude(com.fasterxml.jackson.annotation.JsonInclude.Include.NON_NULL) String policyHash,
+                               @com.fasterxml.jackson.annotation.JsonInclude(com.fasterxml.jackson.annotation.JsonInclude.Include.NON_NULL) ToolOrder toolOrder) {
+        public Continuation(PendingOperation operation,Set<String> skills,List<ToolExchange> exchanges,MemoryTypes.View memory,Budget budget,String traceParent,String policyHash) {
+            this(operation,skills,exchanges,memory,budget,traceParent,policyHash,null);
+        }
     public Continuation(PendingOperation operation,Set<String> skills,List<ToolExchange> exchanges,MemoryTypes.View memory,Budget budget,String traceParent) { this(operation,skills,exchanges,memory,budget,traceParent,null); }
 
         public Continuation(PendingOperation operation,Set<String> skills,List<ToolExchange> exchanges,MemoryTypes.View memory,Budget budget){this(operation,skills,exchanges,memory,budget,null);}
