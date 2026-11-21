@@ -19,7 +19,8 @@ class FeedbackAnalysisTest {
     @TempDir Path directory;
     final ObjectMapper json=new ObjectMapper().findAndRegisterModules();
     final AccessScope owner=new AccessScope("tenant","881",Set.of(1001L),"opaque-ref");
-    final Request request=new Request(new DanmakuTypes.Query(1001,LocalDateTime.of(2026,10,20,0,0),LocalDateTime.of(2026,10,21,0,0)),Set.of(Source.COMMENT,Source.DANMAKU),Grounding.FEEDBACK_ONLY,null,null,"feedback-v1");
+    final LocalDate queryDate=LocalDate.now(DanmakuTypes.ZONE).minusDays(2);
+    final Request request=new Request(new DanmakuTypes.Query(1001,queryDate.atStartOfDay(),queryDate.plusDays(1).atStartOfDay()),Set.of(Source.COMMENT,Source.DANMAKU),Grounding.FEEDBACK_ONLY,null,null,"feedback-v1");
     FeedbackPolicy policy(){return new FeedbackPolicy(67108864,24000,40,2000,16000000,Duration.ofHours(1),Duration.ofSeconds(30));}
     final class Fixture {
         final MemoryFeedbackJobStore store=new MemoryFeedbackJobStore();
