@@ -10,6 +10,10 @@ public final class AssistantToolAccess {
         "create_feedback_report",
         "prepare_comment_draft", "prepare_danmaku_draft", "prepare_creator_interactions");
     public static boolean permits(String tool, AccessScope scope) {
-        return !CREATOR.contains(tool) || !scope.videoIds().isEmpty();
+        return !requiresCreatorAccess(tool) || !scope.videoIds().isEmpty();
+    }
+
+    public static boolean requiresCreatorAccess(String tool) {
+        return CREATOR.contains(tool);
     }
 }

@@ -26,6 +26,15 @@ class IntentCandidateCatalogTest {
         assertTrue(choices.stream().noneMatch(c->Set.of("comment-analysis","audience-report","video-metrics","smart-comment").contains(c.id())));
         assertThrows(UnsupportedOperationException.class,()->choices.clear());
     }
+    @Test void viewerAndCreatorShareTheSameInitialCandidateIds() {
+        var viewer=new AccessScope("tenant","viewer",Set.of(),"",Set.of(1001L));
+        var viewerIds=catalog.candidates(viewer).stream().map(IntentCandidate::id).toList();
+        var authorIds=catalog.candidates(author).stream().map(IntentCandidate::id).toList();
+        assertEquals(List.of("conversation","knowledge","video-content","video-discovery","report-query","unknown"),viewerIds);
+        var shared=viewerIds.subList(0,viewerIds.size()-1);
+        assertEquals(shared,authorIds.subList(0,shared.size()));
+        assertEquals("unknown",authorIds.get(authorIds.size()-1));
+    }
     @Test void selectionUsesOnlyProvidedCandidatesAndServerDerivedCategory() {
         var input=input(author);var selection=IntentCandidateCatalog.validate(input,new IntentRecognition(Intent.OTHER,"audience-report",List.of("video-content","comment-analysis"),List.of()));
         assertEquals(Intent.DANMAKU_REPORT,selection.intent());assertEquals(input.intentCandidates(),selection.candidates());

@@ -27,6 +27,7 @@ public final class IntentCandidateCatalog {
     public IntentCandidateCatalog(SkillCatalog skills,ToolCatalog tools) {this.skills=skills;this.tools=tools;}
     public List<IntentCandidate> candidates(AccessScope scope) {
         List<IntentCandidate> result=new ArrayList<>();
+        List<IntentCandidate> creatorCandidates=new ArrayList<>();
         result.add(new IntentCandidate("conversation","通用对话","闲聊、写作、整理想法。","无需读取实际业务数据。",null,Set.of(),List.of(),Intent.OTHER));
         result.add(new IntentCandidate("knowledge","知识与操作咨询","解释概念、介绍能力、使用指导。","询问功能本身不等于要求执行功能。",null,Set.of(),List.of(),Intent.KNOWLEDGE));
         Set<String> described=new HashSet<>();
@@ -36,14 +37,17 @@ public final class IntentCandidateCatalog {
                     || !skills.read(definition.skill()).tools().contains(definition.tool()) || !AssistantToolAccess.permits(definition.tool(),scope))continue;
             var skill=skills.read(definition.skill());
             var allowed=skill.tools().stream().filter(tools.all()::containsKey).filter(tool->AssistantToolAccess.permits(tool,scope)).collect(java.util.stream.Collectors.toSet());
-            result.add(new IntentCandidate(definition.id(),definition.label(),skill.description(),definition.boundary(),skill.name(),allowed,definition.conditions(),definition.category()));
+            var candidates=AssistantToolAccess.requiresCreatorAccess(definition.tool()) ? creatorCandidates : result;
+            candidates.add(new IntentCandidate(definition.id(),definition.label(),skill.description(),definition.boundary(),skill.name(),allowed,definition.conditions(),definition.category()));
         }
         for(String name:new TreeSet<>(skills.names())) {
             if(described.contains(name))continue;
             var skill=skills.read(name);
             if(!tools.all().keySet().containsAll(skill.tools()) || skill.tools().stream().anyMatch(tool->!AssistantToolAccess.permits(tool,scope)))continue;
-            result.add(new IntentCandidate(name,name,skill.description(),"按注册能力说明识别，不扩大读取或操作范围。",name,skill.tools(),List.of(),Intent.OTHER));
+            var candidates=skill.tools().stream().anyMatch(AssistantToolAccess::requiresCreatorAccess) ? creatorCandidates : result;
+            candidates.add(new IntentCandidate(name,name,skill.description(),"按注册能力说明识别，不扩大读取或操作范围。",name,skill.tools(),List.of(),Intent.OTHER));
         }
+        result.addAll(creatorCandidates);
         result.add(new IntentCandidate("unknown","尚未明确","无法可靠对应候选能力。","缺少视频或日期本身不代表目标不明确。",null,Set.of(),List.of(),Intent.UNKNOWN));
         if(result.size()>32)throw new IllegalStateException("Too many intent candidates");
         return List.copyOf(result);
