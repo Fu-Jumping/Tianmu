@@ -17,7 +17,7 @@ public class MilvusConfiguration {
     @ConfigurationProperties("agent.feedback.milvus")
     public record Properties(String endpoint,String tokenFile,@DefaultValue("default") String database,
                              String collection,int dimension,@DefaultValue("5s") Duration timeout,
-                             @DefaultValue("false") boolean provenanceEnabled) {}
+                             Boolean provenanceEnabled) {}
 
     @Bean FeedbackVectorIndex feedbackVectorIndex(Properties p,ObjectMapper json){
         if(p.tokenFile()==null || p.tokenFile().isBlank())throw new IllegalArgumentException("Configure Milvus token-file");

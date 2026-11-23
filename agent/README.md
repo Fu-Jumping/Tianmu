@@ -260,11 +260,13 @@ HTTP / SSE、存储、Trace 和模型适配的详细契约分别保存在本模�
 
 系统提示词、工具/Skill/Agent 目录、本轮聚焦、记忆、页面参考、消息与压缩、运行状态和输出契约采用固定槽位的 [ContextEnvelope 动态上下文架构](docs/动态上下文架构.md)。模块可以缺省，顺序与职责保持固定；A2A 目录只在真实能力存在时启用。
 
-长期记忆的目标架构、前置节点与 Loop 接入、数据版本、读写工具、用户管理、Trace 和分期验收见 [多层记忆技术方案](docs/多层记忆技术方案.md)。该文档是待实施设计，不表示长期记忆已经上线。
+长期记忆当前实现与验证边界见 [记忆机制改造与验收](docs/记忆机制改造与验收.md)，架构入口见 [统一技术设计](docs/Agent架构与工程治理技术设计.md)第16节。[多层记忆技术方案](docs/多层记忆技术方案.md)保留历史设计，不能替代当前实现或线上验收。
 
-开发代码已有认证记忆管理 API、显式工具、独立召回、来源/版本失效、后台自动提取和管理 UI；`AGENT_MEMORY_ENABLED` 默认 false，完整质量验收及上线尚未完成。管理接口不接受客户端伪造 session/run/source 字段。启用需要 mysql 存储模式；暂停仍可查看或删除自己的记录，保存和更新仅 ON 模式允许。增删改与清空使用 `Idempotency-Key`，修改/删除必须提供 expectedVersion；列表以 beforeSequence 和 scope 分页。VIDEO 每次重新授权。自动提取还需用户独立开启，默认关闭。
+当前代码已接入认证记忆管理 API、宿主统一召回、来源/版本失效、后台增量提取、Dream 整理和管理 UI。模型记忆 Tool 与 personal-memory Skill 已移除；明确保存由宿主排队后台处理，“已排队”不代表已保存。个人记忆总览由宿主直接分页交付，普通问题由宿主装配核心与相关记忆，可选语义索引不可用时降级关键词召回。
 
-`AGENT_COMPACTION_ENABLED` 独立启用会话压缩，默认 false；复用现有 MySQL、outbox 与 memoryExecutor，不新增中间件。`AGENT_COMPACTION_TRIGGER_BYTES` 默认 5632，表示旧历史原始消息的序列化触发阈值，不能视作 token 数。较早完整轮次在后台生成最多约 3.5 KiB 的结构化摘要，模型上下文选中的摘要含元数据总量不超过 4 KiB；近期至少两轮继续使用原文，来源失效会阻止摘要和后续派生回答被使用。详见[压缩设计与实现记录](docs/上下文压缩调研与实施方案.md)。
+`persistent` profile（MySQL）默认开启个人记忆，可通过 `AGENT_MEMORY_ENABLED=false` 关闭。实际启用以运行服务配置为准；启用需要 mysql 存储模式；暂停仍可查看或删除自己的记录，保存和更新仅 ON 模式允许。新账号 auto_extract 默认开启，迁移保留已有账号的关闭设置；关闭自动提取但模式仍为 ON 时，仍可明确请求保存。管理接口不接受客户端伪造 session/run/source 字段，手工记忆不接受 SESSION 范围。增删改与清空使用 `Idempotency-Key`，修改/删除必须提供 expectedVersion；列表以 beforeSequence 和 scope 分页。VIDEO 每次重新授权。本地验证及尚未执行的真实模型、线上验收范围见上述验收记录，不能据源码推断生产状态。
+
+会话压缩在 `persistent` profile 默认开启，可通过 `AGENT_COMPACTION_ENABLED=false` 独立关闭。复用现有 MySQL、outbox 与 memoryExecutor，不新增中间件。`AGENT_COMPACTION_TRIGGER_BYTES` 默认 5632，表示旧历史原始消息的序列化触发阈值，不能视作 token 数。较早完整轮次在后台生成最多约 3.5 KiB 的结构化摘要，模型上下文选中的摘要含元数据总量不超过 4 KiB；近期至少两轮继续使用原文，来源失效会阻止摘要和后续派生回答被使用。详见[压缩设计与实现记录](docs/上下文压缩调研与实施方案.md)。
 
 隔离 MySQL 测试使用 `AGENT_MEMORY_IT=true`、`AGENT_MEMORY_JDBC_URL`、`AGENT_MEMORY_DB_USER` 和可选 `AGENT_MEMORY_DB_PASSWORD`，仅接受名称以 `_it` 结尾的独立数据库。真实模型压缩验证另用 `AGENT_COMPACTION_REAL=true`、`AGENT_COMPACTION_REAL_URL`、`AGENT_COMPACTION_REAL_MODEL` 和 `AGENT_COMPACTION_REAL_KEY`，只使用虚构会话；调用正常模型适配、上下文协议与 Trace，质量样例不替代上线评测。
 

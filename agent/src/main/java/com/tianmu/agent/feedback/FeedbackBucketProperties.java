@@ -8,7 +8,7 @@ import org.springframework.boot.context.properties.bind.DefaultValue;
 public record FeedbackBucketProperties(@DefaultValue("5") int maxBuckets,
         @DefaultValue("0.65") double minSimilarity,@DefaultValue("2") int minMembers,
         @DefaultValue("50") int maxIterations,@DefaultValue("64") int candidateSamples,
-        @DefaultValue("false") boolean centeringEnabled,@DefaultValue("20") int centerMinExpressions,
+        @DefaultValue("true") boolean centeringEnabled,@DefaultValue("20") int centerMinExpressions,
         @DefaultValue("0.01") double centerMinRms,@DefaultValue("0.001") double centerMinResidual,
         @DefaultValue("0.30") double centeredSimilarity,@DefaultValue("0.20") double centerMaxExcludedFraction,@DefaultValue("8") int modelCandidatesPerBucket) {
     public FeedbackBucketProperties(int maxBuckets,double minSimilarity,int minMembers,int maxIterations,int candidateSamples){this(maxBuckets,minSimilarity,minMembers,maxIterations,candidateSamples,false,20,.01,.001,.30,.20,8);}

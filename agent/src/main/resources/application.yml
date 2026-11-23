@@ -29,10 +29,15 @@ management:
           include: readinessState,agentStorage
 agent:
   policy-snapshot:
-    enabled: ${AGENT_POLICY_SNAPSHOT_ENABLED:false}
+    enabled: ${AGENT_POLICY_SNAPSHOT_ENABLED:true}
   memory:
-    # Personal memory is gated until lifecycle and real-model quality acceptance pass.
+    # The persistent profile enables personal memory by default. Account settings control reads and learning.
     enabled: ${AGENT_MEMORY_ENABLED:false}
+    embedding:
+      enabled: ${AGENT_MEMORY_EMBEDDING_ENABLED:auto}
+      endpoint: ${AGENT_MEMORY_EMBEDDING_ENDPOINT:}
+      token-file: ${AGENT_MEMORY_EMBEDDING_TOKEN_FILE:}
+      revision: ${AGENT_MEMORY_EMBEDDING_REVISION:}
   tools:
     parallel:
       enabled: ${AGENT_TOOLS_PARALLEL_ENABLED:true}
@@ -47,13 +52,13 @@ agent:
       max-entries: ${VIDEO_CACHE_MAX_ENTRIES:1024}
   feedback:
     rerank:
-      enabled: ${FEEDBACK_RERANK_ENABLED:false}
+      enabled: ${FEEDBACK_RERANK_ENABLED:auto}
       endpoint: ${FEEDBACK_RERANK_ENDPOINT:}
       model: ${FEEDBACK_RERANK_MODEL:qwen3-rerank}
       api-key: ${FEEDBACK_RERANK_API_KEY:}
       api-key-file: ${FEEDBACK_RERANK_API_KEY_FILE:}
     compression:
-      enabled: ${FEEDBACK_COMPRESSION_ENABLED:false}
+      enabled: ${FEEDBACK_COMPRESSION_ENABLED:auto}
       min-effective-chars: ${FEEDBACK_MIN_EFFECTIVE_CHARS:3}
       playback-bucket-ms: ${FEEDBACK_PLAYBACK_BUCKET_MS:15000}
       min-similarity: ${FEEDBACK_CLUSTER_MIN_SIMILARITY:0.90}
@@ -76,7 +81,7 @@ agent:
       min-members: ${FEEDBACK_BUCKETS_MIN_MEMBERS:2}
       max-iterations: ${FEEDBACK_BUCKETS_MAX_ITERATIONS:50}
       candidate-samples: ${FEEDBACK_BUCKETS_CANDIDATE_SAMPLES:64}
-      centering-enabled: ${FEEDBACK_BUCKETS_CENTERING_ENABLED:false}
+      centering-enabled: ${FEEDBACK_BUCKETS_CENTERING_ENABLED:true}
       model-candidates-per-bucket: ${FEEDBACK_BUCKETS_MODEL_CANDIDATES_PER_BUCKET:8}
       center-min-expressions: ${FEEDBACK_BUCKETS_CENTER_MIN_EXPRESSIONS:20}
       center-min-rms: ${FEEDBACK_BUCKETS_CENTER_MIN_RMS:0.01}
@@ -89,21 +94,21 @@ agent:
       window: ${FEEDBACK_RESULT_REUSE_WINDOW:10m}
       max-entries: ${FEEDBACK_RESULT_REUSE_MAX_ENTRIES:1024}
     embedding:
-      enabled: ${AGENT_FEEDBACK_EMBEDDING_ENABLED:false}
+      enabled: ${AGENT_FEEDBACK_EMBEDDING_ENABLED:auto}
       endpoint: ${AGENT_FEEDBACK_EMBEDDING_ENDPOINT:https://maas.qianwenaiapi.com/compatible-mode/v1/embeddings}
       token-file: ${AGENT_FEEDBACK_EMBEDDING_TOKEN_FILE:}
       model: ${AGENT_FEEDBACK_EMBEDDING_MODEL:qwen3.7-text-embedding}
       revision: ${AGENT_FEEDBACK_EMBEDDING_REVISION:}
       dimension: ${AGENT_FEEDBACK_EMBEDDING_DIMENSION:2560}
     milvus:
-      enabled: ${AGENT_FEEDBACK_MILVUS_ENABLED:false}
+      enabled: ${AGENT_FEEDBACK_MILVUS_ENABLED:auto}
       endpoint: ${AGENT_FEEDBACK_MILVUS_ENDPOINT:}
       token-file: ${AGENT_FEEDBACK_MILVUS_TOKEN_FILE:}
       database: ${AGENT_FEEDBACK_MILVUS_DATABASE:default}
       collection: ${AGENT_FEEDBACK_MILVUS_COLLECTION:}
       dimension: ${AGENT_FEEDBACK_MILVUS_DIMENSION:0}
       timeout: ${AGENT_FEEDBACK_MILVUS_TIMEOUT:5s}
-      provenance-enabled: ${AGENT_FEEDBACK_MILVUS_PROVENANCE_ENABLED:false}
+      provenance-enabled: ${AGENT_FEEDBACK_MILVUS_PROVENANCE_ENABLED:}
     max-snapshot-bytes: 67108864
     batch-bytes: 24000
     batch-groups: 80

@@ -33,16 +33,20 @@ def catalog():
              "", "配置失败应阻止启动；预算、租约/心跳、连接池和重试关系由各record构造器校验。不得用调大容量代替故障定位。安全协议限制不在本表自动变成可调参数。",
              "", "前台Loop/Context/Preparation、现有FeedbackPolicy/VideoCachePolicy等既有配置见[统一技术设计](Agent架构与工程治理技术设计.md)第9、15.5、16节及application*.yml；本表列出新增模块数值声明。",
              "", "## agent.policy-snapshot", "", "| 属性键 | 默认值 | 消费及生效语义 |", "|---|---|---|",
-             "| `agent.policy-snapshot.enabled` | false | PolicySnapshotProperties → ExecutionPolicyFactory；YAML显式环境别名 `AGENT_POLICY_SNAPSHOT_ENABLED`。仅新Run创建时捕获，旧记录永不补造；关闭写者仍兼容读取已保存v1。先部署兼容reader再启用writer。 |", ""]
+             "| `agent.policy-snapshot.enabled` | true | PolicySnapshotProperties → ExecutionPolicyFactory；YAML显式环境别名 `AGENT_POLICY_SNAPSHOT_ENABLED`。仅新Run创建时捕获，旧记录永不补造；关闭写者仍兼容读取已保存v1。回滚需使用支持v1的reader。 |", ""]
+    lines += ["## 个人记忆与会话压缩", "", "| 属性键 | 默认值 | 消费及生效语义 |", "|---|---|---|",
+              "| `agent.memory.enabled` | persistent 为 true；基础为 false | AGENT_MEMORY_ENABLED。启动生效，启用需要 MySQL；账号的读写模式和自动整理独立设置。 |",
+              "| `agent.compaction.enabled` | true（仅 MySQL 生效） | AGENT_COMPACTION_ENABLED。启动生效，启用需要 MySQL；后台摘要生成需要记忆模型。 |",
+              "| `agent.memory.embedding.enabled` | auto | AGENT_MEMORY_EMBEDDING_ENABLED。个人记忆开启且配置独立 endpoint、token-file、revision 后启动；缺少配置时使用关键词召回。显式 true/false 可覆盖。 |", ""]
     lines += ["## agent.context 投影顺序", "", "| 属性键 | 默认值 | 消费及生效语义 |", "|---|---|---|",
               "| `agent.context.tail-projection-enabled` | true | ContextPolicy → ExecutionPolicyFactory、DeepSeekClient；YAML别名 `AGENT_CONTEXT_TAIL_PROJECTION_ENABLED`。启动绑定。新Run使用v3，关闭后新Run使用v1；已保存快照继续使用其原投影。保留新版快照期间使用兼容二进制回退。 |", ""]
     lines += ["## agent.feedback.compression协议", "", "| 属性键 | 默认值 | 消费及生效语义 |", "|---|---|---|",
-              "| `agent.feedback.compression.enabled` | false | FeedbackCompressionProperties → TaskAssembler在受理时冻结feedback:compression资源标记，ToolDispatcher按任务标记选择三Tool；只影响新任务，旧任务不自动升级。显式别名FEEDBACK_COMPRESSION_ENABLED。启动生效，启用须有Embedding/Milvus；缺失不得EXACT_ONLY回退。 |",
+              "| `agent.feedback.compression.enabled` | auto | FeedbackCompressionProperties → TaskAssembler在受理时冻结feedback:compression资源标记，ToolDispatcher按任务标记选择三Tool；只影响新任务，旧任务不自动升级。显式别名FEEDBACK_COMPRESSION_ENABLED。同时启用 Embedding 和 Milvus 后自动开启。显式 true 要求两项服务，false 可关闭。 |",
               "| `agent.feedback.compression.min-similarity` | 0.90 | FeedbackCompression任务内星形聚类的余弦下限，finite且(0,1]；FEEDBACK_CLUSTER_MIN_SIMILARITY。进入材料/后台policyHash，重启生效，已封存assignment不重算。 |",
               "| `agent.feedback.compression.min-centrality` | 0.75 | FeedbackCompression代表准入的质心余弦阈值，finite且[-1,1]；FEEDBACK_MIN_CENTRALITY。缺来源代表明确失败，进入材料policyHash。 |",
               "| `agent.feedback.compression.near-duplicate-similarity` | 0.96 | FeedbackCompression可选代表的近重复门槛，finite且[min-similarity,1]；FEEDBACK_NEAR_DUPLICATE_SIMILARITY。来源mandatory优先，进入材料policyHash。 |", ""]
     lines += ["## agent.feedback.rerank", "", "| 属性键 | 默认值 | 消费及生效语义 |", "|---|---|---|",
-              "| `agent.feedback.rerank.enabled` | false | FEEDBACK_RERANK_ENABLED。仅决定新代表报告任务的准入，已有任务继续使用持久协议。开启还需现有压缩链路和 Qwen 端点。 |",
+              "| `agent.feedback.rerank.enabled` | auto | FEEDBACK_RERANK_ENABLED。报告压缩开启且配置精排端点和鉴权后自动开启。仅决定新任务的协议，已有任务继续使用持久协议。显式 true/false 可覆盖。 |",
               "| `agent.feedback.rerank.endpoint` | 空 | FEEDBACK_RERANK_ENDPOINT。兼容 HTTPS /reranks 或 DashScope 原生重排完整地址，启动绑定并进入冻结指纹。关闭准入时保留原端点供在途任务完成。 |",
               "| `agent.feedback.rerank.model` | qwen3-rerank | FEEDBACK_RERANK_MODEL。可选 qwen3.7-text-rerank，启动绑定并进入冻结指纹。 |",
               "| `agent.feedback.rerank.api-key` | 空 | FEEDBACK_RERANK_API_KEY。仅用于供应商请求鉴权。 |",
@@ -50,7 +54,7 @@ def catalog():
     lines += ["## agent.feedback.buckets相似度", "", "| 属性键 | 默认值 | 消费及生效语义 |", "|---|---|---|",
               "| `agent.feedback.buckets.min-similarity` | 0.65 | 最终成员到桶中心的余弦下限；finite且0..1，进入冻结revision，启动生效；需在真实语料校准。YAML别名 `FEEDBACK_BUCKETS_MIN_SIMILARITY`；其他字段别名依次为 `FEEDBACK_BUCKETS_MAX`、`FEEDBACK_BUCKETS_MIN_MEMBERS`、`FEEDBACK_BUCKETS_MAX_ITERATIONS`、`FEEDBACK_BUCKETS_CANDIDATE_SAMPLES`。 |", ""]
     lines += ["## agent.feedback.buckets任务中心化", "", "| 属性键 | 默认值 | 消费及生效语义 |", "|---|---|---|",
-              "| `agent.feedback.buckets.centering-enabled` | false | 可选任务内均值中心化；YAML别名 FEEDBACK_BUCKETS_CENTERING_ENABLED，记录实际模式和回退原因，进入协议revision。 |",
+              "| `agent.feedback.buckets.centering-enabled` | true | 任务内均值中心化；YAML别名 FEEDBACK_BUCKETS_CENTERING_ENABLED，记录实际模式和回退原因，进入协议 revision。升级已启用代表报告的实例前先排空使用旧策略的在途任务。 |",
               "| `agent.feedback.buckets.center-min-rms` | 0.01 | 向量残差均方根低于此值时全任务回退原始余弦；别名 FEEDBACK_BUCKETS_CENTER_MIN_RMS。 |",
               "| `agent.feedback.buckets.center-min-residual` | 0.001 | 中心化后的单条残差范数下限；低于该值归未归类；别名 FEEDBACK_BUCKETS_CENTER_MIN_RESIDUAL。 |",
               "| `agent.feedback.buckets.center-max-excluded-fraction` | 0.20 | 近均值表达组或其原始成员的比例超过该值时整体回退原始余弦；别名 FEEDBACK_BUCKETS_CENTER_MAX_EXCLUDED_FRACTION。 |",
@@ -65,11 +69,13 @@ def catalog():
     lines += ["## agent.feedback思考调用时限", "", "| 属性键 | 默认值 | 消费及生效语义 |", "|---|---|---|",
               "| `agent.feedback.model-timeout` | 基础30s；deepseek profile 120s | FeedbackPolicy → FeedbackAnalysisService；显式环境别名 `FEEDBACK_MODEL_TIMEOUT`，启动生效，精确范围1–180秒。单次模型调用取此值与job剩余deadline较小者；工作租约为超时加model-lease-margin-seconds，取消、fence、调用与Token预算不变。修改前排空既有任务，不将新策略冒充旧job版本。 |", ""]
     lines += ["## agent.feedback.embedding", "", "| 属性键 | 默认值 | 消费及生效语义 |", "|---|---|---|",
+              "| `agent.feedback.embedding.enabled` | auto | AGENT_FEEDBACK_EMBEDDING_ENABLED。提供 endpoint、token-file、revision 后自动开启。显式 true/false 可覆盖。 |",
+              "| `agent.feedback.milvus.enabled` | auto | AGENT_FEEDBACK_MILVUS_ENABLED。提供 endpoint、token-file、collection 和正数 dimension 后自动开启。显式 true/false 可覆盖。 |",
               "| `agent.feedback.embedding.model` | qwen3.7-text-embedding | 环境变量 `AGENT_FEEDBACK_EMBEDDING_MODEL`；支持标准版及 flash，启动时绑定。模型与维数进入向量缓存命名空间及反馈策略版本；切换前排空未完成任务，旧模型向量不复用。 |",
               "| `agent.feedback.embedding.dimension` | 2560 | 环境变量 `AGENT_FEEDBACK_EMBEDDING_DIMENSION`；标准版支持 256、512、768、1024、1536、2048、2560，flash 支持至 1024。须与 Milvus 集合维数一致；站点 overlay 以 `FEEDBACK_EMBEDDING_DIMENSION` 同时设置两者，更换维数须事先创建独立集合并重建向量。 |", ""]
     lines += ["## 并行准备与向量来源（2026-11-08）", "", "| 属性键 | 默认值 | 消费及生效语义 |", "|---|---|---|",
               "| `agent.tools.parallel.enabled` | true | ToolParallelPolicy → ToolBatchExecutor；YAML别名 AGENT_TOOLS_PARALLEL_ENABLED。仅已准入的独立读取或宿主受限持久提交可并行，默认每Run 2路，范围1–4。启动生效；关闭回退同批串行，材料后台仍可在提交后推进。切换前排空在途任务。 |",
-              "| `agent.feedback.milvus.provenance-enabled` | false | MilvusConfiguration → MilvusFeedbackVectorIndex。YAML别名 AGENT_FEEDBACK_MILVUS_PROVENANCE_ENABLED。启动生效；启用前创建含provenance字段的独立集合并切换collection，所有写者统一升级。false兼容旧五字段集合、命中来源为UNKNOWN；true将来源、生成时间、embedding版本与vector同条upsert。不得对旧集合直接打开或允许旧writer写入新集合。 |", ""]
+              "| `agent.feedback.milvus.provenance-enabled` | 按集合自动识别 | AGENT_FEEDBACK_MILVUS_PROVENANCE_ENABLED。首次读写向量时查询集合 schema，含 VarChar provenance 字段即启用。自动识别需要集合 DescribeCollection 权限。true/false 可显式指定。切换带来源字段的集合时，所有写者须统一升级。 |", ""]
     sources = {p: p.read_text(encoding="utf-8") for p in JAVA.rglob("*.java")}
     errors = []
     lines += ["## agent.video.notes.vision", "", "| 属性键 | 默认值 | 消费及生效语义 |", "|---|---|---|",

@@ -1,4 +1,6 @@
 agent:
+  memory:
+    enabled: ${AGENT_MEMORY_ENABLED:true}
   storage:
     mode: mysql
     jdbc-url: ${AGENT_JDBC_URL:}

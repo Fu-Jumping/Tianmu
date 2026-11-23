@@ -19,14 +19,14 @@ public final class MilvusFeedbackVectorIndex implements FeedbackVectorIndex {
     private final Duration timeout;
     private final ObjectMapper json;
     private final OkHttpClient http;
-    private final boolean provenanceEnabled;
+    private volatile Boolean provenanceEnabled;
 
     public MilvusFeedbackVectorIndex(String endpoint,String token,String database,String collection,
                                     int dimension,Duration timeout,ObjectMapper json) {
         this(endpoint,token,database,collection,dimension,timeout,json,false);
     }
     public MilvusFeedbackVectorIndex(String endpoint,String token,String database,String collection,
-                                    int dimension,Duration timeout,ObjectMapper json,boolean provenanceEnabled) {
+                                    int dimension,Duration timeout,ObjectMapper json,Boolean provenanceEnabled) {
         URI uri;
         try{uri=URI.create(endpoint);}catch(RuntimeException e){throw new IllegalArgumentException("Invalid Milvus endpoint");}
         if(!Set.of("http","https").contains(Objects.toString(uri.getScheme(),"")) || uri.getHost()==null
@@ -50,6 +50,7 @@ public final class MilvusFeedbackVectorIndex implements FeedbackVectorIndex {
 
     @Override public void upsert(Namespace ns,List<Entry> entries,CallControl control){
         check(control);batch(entries.size());
+        boolean writeProvenance=provenanceEnabled(control);
         var data=new ArrayList<Map<String,Object>>();var ids=new HashSet<String>();
         for(var entry:entries){
             entry.reference().requireSource(ns.source());validate(entry.vector());
@@ -57,7 +58,7 @@ public final class MilvusFeedbackVectorIndex implements FeedbackVectorIndex {
             if(!ids.add(id))throw new IllegalArgumentException("Duplicate vector version in batch");
             var row=new LinkedHashMap<String,Object>(Map.of("id",id,"scope_key",ns.key(),"record_id",entry.reference().recordId(),
                     "content_version",entry.reference().contentVersion(),"vector",entry.vector()));
-            if(provenanceEnabled){
+            if(writeProvenance){
                 var p=entry.provenance();
                 if(p.origin()!=Origin.UNKNOWN && !ns.embeddingVersion().equals(p.embeddingVersion()))throw new IllegalArgumentException("Vector provenance version mismatch");
                 try{row.put("provenance",json.writeValueAsString(p));}catch(com.fasterxml.jackson.core.JsonProcessingException invalid){throw protocol();}
@@ -65,7 +66,7 @@ public final class MilvusFeedbackVectorIndex implements FeedbackVectorIndex {
             data.add(row);
         }
         var body=base();body.put("data",data);
-        var result=post("upsert",body,control);
+        var result=post("entities/upsert",body,control);
         if(!result.path("upsertCount").isIntegralNumber() || result.path("upsertCount").longValue()!=entries.size())
             throw protocol();
     }
@@ -78,7 +79,7 @@ public final class MilvusFeedbackVectorIndex implements FeedbackVectorIndex {
         body.put("filter",scopeFilter(ns));body.put("consistencyLevel","Strong");
         body.put("searchParams",Map.of("metricType","COSINE","params",Map.of()));
         body.put("outputFields",List.of("id","scope_key","record_id","content_version"));
-        var data=post("search",body,control);
+        var data=post("entities/search",body,control);
         if(!data.isArray() || data.size()>limit)throw protocol();
         var hits=new ArrayList<Candidate>();var ids=new HashSet<String>();
         try {
@@ -101,9 +102,10 @@ public final class MilvusFeedbackVectorIndex implements FeedbackVectorIndex {
     @Override public Map<Reference,Entry> fetchEntries(Namespace ns,List<Reference> refs,CallControl control){
         check(control);batch(refs.size());var expected=new HashMap<String,Reference>();
         for(var ref:refs){ref.requireSource(ns.source());if(expected.put(ref.key(ns),ref)!=null)throw new IllegalArgumentException("Duplicate requested version");}
-        var fields=new ArrayList<>(List.of("id","scope_key","record_id","content_version","vector"));if(provenanceEnabled)fields.add("provenance");
+        boolean readProvenance=provenanceEnabled(control);
+        var fields=new ArrayList<>(List.of("id","scope_key","record_id","content_version","vector"));if(readProvenance)fields.add("provenance");
         var body=base();body.put("consistencyLevel","Strong");body.put("id",expected.keySet().stream().sorted().toList());body.put("outputFields",fields);
-        var data=post("get",body,control);if(!data.isArray() || data.size()>refs.size())throw protocol();
+        var data=post("entities/get",body,control);if(!data.isArray() || data.size()>refs.size())throw protocol();
         var found=new HashMap<Reference,Entry>();
         for(var row:data){
             var ref=expected.get(row.path("id").asText());
@@ -111,7 +113,7 @@ public final class MilvusFeedbackVectorIndex implements FeedbackVectorIndex {
             var vector=new ArrayList<Float>();for(var n:row.path("vector")){if(!n.isNumber())throw protocol();vector.add(n.floatValue());}
             try{validate(vector);}catch(IllegalArgumentException invalid){throw protocol();}
             Provenance provenance=Provenance.unknown();
-            if(provenanceEnabled && row.hasNonNull("provenance")){
+            if(readProvenance && row.hasNonNull("provenance")){
                 try{provenance=json.readValue(row.get("provenance").asText(),Provenance.class);
                     if(provenance==null || provenance.origin()!=Origin.UNKNOWN && !ns.embeddingVersion().equals(provenance.embeddingVersion()))throw protocol();
                 }catch(com.fasterxml.jackson.core.JsonProcessingException invalid){throw protocol();}
@@ -125,7 +127,7 @@ public final class MilvusFeedbackVectorIndex implements FeedbackVectorIndex {
         check(control);batch(refs.size());var ids=new TreeSet<String>();
         for(var ref:refs){ref.requireSource(ns.source());ids.add("\""+ref.key(ns)+"\"");}
         var body=base();body.put("filter",scopeFilter(ns)+" and id in ["+String.join(",",ids)+"]");
-        post("delete",body,control);
+        post("entities/delete",body,control);
     }
 
     private Map<String,Object> base(){var b=new LinkedHashMap<String,Object>();b.put("dbName",database);b.put("collectionName",collection);return b;}
@@ -140,12 +142,29 @@ public final class MilvusFeedbackVectorIndex implements FeedbackVectorIndex {
     private static void check(CallControl control){
         control.checkpoint();if(!Instant.now().isBefore(control.deadline()))throw new AgentException("DEADLINE_EXCEEDED","Vector operation deadline exceeded");
     }
+    private boolean provenanceEnabled(CallControl control) {
+        Boolean known = provenanceEnabled;
+        if (known != null) return known;
+        var fields = post("collections/describe", base(), control).path("fields");
+        if (!fields.isArray() || fields.isEmpty()) throw protocol();
+        boolean supported = false;
+        for (var field : fields) {
+            if ("provenance".equals(field.path("name").asText())) {
+                if (!"VarChar".equals(field.path("type").asText())) throw protocol();
+                supported = true;
+                break;
+            }
+        }
+        provenanceEnabled = supported;
+        return supported;
+    }
+
     private JsonNode post(String action,Map<String,Object> body,CallControl control){
         check(control);
         try {
             byte[] bytes=json.writeValueAsBytes(body);
             if(bytes.length>MAX_BODY)throw new AgentException("VECTOR_REQUEST_TOO_LARGE","Vector request exceeds byte quota");
-            var builder=new Request.Builder().url(endpoint+"/v2/vectordb/entities/"+action)
+            var builder=new Request.Builder().url(endpoint+"/v2/vectordb/"+action)
                     .post(RequestBody.create(MediaType.get("application/json"),bytes));
             if(!token.isEmpty())builder.header("Authorization","Bearer "+token);
             var call=http.newCall(builder.build());

@@ -22,6 +22,8 @@ class MilvusFeedbackVectorIndexTest {
     final List<JsonNode> requests=new CopyOnWriteArrayList<>();
     final List<String> paths=new CopyOnWriteArrayList<>();
     volatile int status=200; volatile String reply="{\"code\":0,\"data\":{\"upsertCount\":1}}";
+    final List<JsonNode> schemas = new CopyOnWriteArrayList<>();
+    volatile String schema;
     volatile long delay; final CountDownLatch entered=new CountDownLatch(1);
     @BeforeEach void start() throws Exception {
         server=HttpServer.create(new InetSocketAddress("127.0.0.1",0),0);
@@ -35,6 +37,14 @@ class MilvusFeedbackVectorIndexTest {
                 e.sendResponseHeaders(status,body.length);e.getResponseBody().write(body);
             }catch(InterruptedException interrupted){Thread.currentThread().interrupt();}
             finally{e.close();}
+        });
+        server.createContext("/v2/vectordb/collections/describe", exchange -> {
+            try (exchange) {
+                schemas.add(json.readTree(exchange.getRequestBody()));
+                byte[] body = schema.getBytes(java.nio.charset.StandardCharsets.UTF_8);
+                exchange.sendResponseHeaders(200, body.length);
+                exchange.getResponseBody().write(body);
+            }
         });
         server.start();index=adapter(Duration.ofSeconds(2));
     }
@@ -68,6 +78,26 @@ class MilvusFeedbackVectorIndexTest {
         legacy.put("provenance",json.writeValueAsString(new Provenance(Origin.REPORT_ANALYSIS,Instant.now(),"wrong-version")));searchReply(List.of(legacy));
         assertEquals("VECTOR_PROTOCOL_ERROR",code(()->index.fetchEntries(ns,List.of(ref),control())));
     }
+    @Test void autoProvenanceUsesAndCachesCollectionSchema() throws Exception {
+        for (boolean supported : List.of(false, true)) {
+            var fields = new ArrayList<>(List.of(Map.of("name", "vector", "type", "FloatVector")));
+            if (supported) fields.add(Map.of("name", "provenance", "type", "VarChar"));
+            schema = json.writeValueAsString(Map.of("code", 0, "data", Map.of("fields", fields)));
+            index = new MilvusFeedbackVectorIndex("http://127.0.0.1:" + server.getAddress().getPort(),
+                    "test-only-token", "default", "feedback_test", 3, Duration.ofSeconds(2), json, null);
+            int initialSchemaReads = schemas.size();
+            int firstRequest = requests.size();
+            reply = "{\"code\":0,\"data\":{\"upsertCount\":1}}";
+            index.upsert(ns, List.of(new Entry(ref, vector)), control());
+            assertEquals(supported, requests.get(firstRequest).path("data").get(0).has("provenance"));
+            reply = "{\"code\":0,\"data\":[]}";
+            index.fetchEntries(ns, List.of(ref), control());
+            assertEquals(supported, requests.get(firstRequest + 1).path("outputFields").toString().contains("provenance"));
+            assertEquals(initialSchemaReads + 1, schemas.size());
+            assertEquals("feedback_test", schemas.get(initialSchemaReads).path("collectionName").asText());
+        }
+    }
+
     @Test void everyOwnershipAndVersionDimensionChangesNamespace(){
         for(var other:List.of(new Namespace("other","owner",1001,Source.COMMENT,ns.embeddingVersion()),
                 new Namespace("tenant","other",1001,Source.COMMENT,ns.embeddingVersion()),

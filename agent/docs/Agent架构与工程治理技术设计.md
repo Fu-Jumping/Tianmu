@@ -66,7 +66,7 @@ flowchart TD
  S --> U[证据完整性与正式交付 / 终态事务]
 ```
 
-主证据：[RequestOrchestrator](../src/main/java/com/tianmu/agent/runtime/RequestOrchestrator.java)、[PreparationService](../src/main/java/com/tianmu/agent/preparation/PreparationService.java)、[TaskAssembler](../src/main/java/com/tianmu/agent/application/TaskAssembler.java)、[AgentRuntime](../src/main/java/com/tianmu/agent/runtime/AgentRuntime.java)。上图压缩和记忆步骤受条件 Bean 开关影响，默认关闭时不会执行相应服务。
+主证据：[RequestOrchestrator](../src/main/java/com/tianmu/agent/runtime/RequestOrchestrator.java)、[PreparationService](../src/main/java/com/tianmu/agent/preparation/PreparationService.java)、[TaskAssembler](../src/main/java/com/tianmu/agent/application/TaskAssembler.java)、[AgentRuntime](../src/main/java/com/tianmu/agent/runtime/AgentRuntime.java)。上图压缩和记忆步骤受条件 Bean 开关影响，`persistent` profile 默认开启两项服务。
 
 ### 3.2 后台等待与恢复
 
@@ -235,9 +235,9 @@ RunState 初期保留兼容外观，逐步委托给生命周期、执行账本�
 | agent.models.catalog | 未配置；目录≤32项/64KiB | RuntimeModelCatalog；版本选择、文件原子更新 | 已有目录刷新语义保留；旧版本恢复失败明确 |
 | agent.context.* | max-input 98304B；max-history 16384B | 环境覆盖；整请求1024..4194304B，历史≤整请求 | Run/调用策略；同装配入口 |
 | context.recent-* 候选 | 实际硬编码4条、8192B | HarnessContextBuilder 取 min(8192,maxHistoryBytes) | 抽出后保持值，完整回合裁剪 |
-| agent.compaction.* | enabled false；trigger-bytes 5632B | AGENT_COMPACTION_ENABLED/TRIGGER_BYTES；@Value | 启动开关；每次压缩记录策略 |
+| agent.compaction.* | persistent 默认开启；trigger-bytes 5632B | AGENT_COMPACTION_ENABLED/TRIGGER_BYTES；@Value | 启动开关；每次压缩记录策略 |
 | compaction retain/target/reserve/retries 候选 | 尚未形成统一配置；不得借填默认虚构已实现 | CompactionService 与模型预算逐项迁移 | 设计确认后先映射既有行为 |
-| agent.memory.* | enabled false；consolidation.enabled false | 条件 Bean；无需以代码存在推断功能已开放 | 启动开关；授权和撤销始终实时 |
+| agent.memory.* | persistent 默认开启；账号模式及自动整理设置独立生效 | 条件 Bean；无需以代码存在推断功能已开放 | 启动开关；授权和撤销始终实时 |
 | memory.guard-interval 候选 | 100000000ns =100ms | MemoryRecallService；交付另有强制 barrier | 可配置节流不能取消关键边界强制复核 |
 | agent.feedback.* | 64MiB；24000B/批、80组/批；2000调用/16000000 Token；总1h/模型30s；读并行1 | FeedbackPolicy；总时限1min..6h；读并行1..4 | 后台任务快照；与前台循环预算明确分账 |
 | agent.feedback.reuse.* | true / 10min / 1024项 | YAML + FeedbackReusePolicy，环境覆盖 | 仅复用有效同范围结果；权限实时 |
@@ -799,7 +799,7 @@ I2初次实现遗漏模型/工具旁路，独立审查提出P1后已补齐；Com
 
 16.1–16.6记录首轮基线，本节记录后续新增源码。发布版本、门控测试及真实Trace证据另行记录，不继承首轮结论。15.3中的“现状”是2A基线；本节新增2B兼容实现，写者默认关闭。
 
-**策略与持久化。** ExecutionPolicySnapshot v1保存Loop、Preparation、Context实际标量，以及模型、资源和解释规则版本；schema/semantics/各规则版本、范围和SHA256均校验。受理时持久initial策略，组装时一次save绑定最终策略、task、deadline和hash；continuation引用同一hash，继续恢复原charged/unknown余额。LoopControl、RuntimeHarness、循环、PreparationService及DeepSeek实际请求context检查消费冻结参数；后台job继续持有自己的预算，实时来源撤销和权限不冻结。`agent.policy-snapshot.enabled=false`，显式环境别名AGENT_POLICY_SNAPSHOT_ENABLED，只影响新Run创建；旧无snapshot记录始终LEGACY_CURRENT_POLICY，关闭写者仍读v1。必须先发布兼容reader、确认其为可回滚基线，再开启writer；开启后不能退回不支持v1的旧二进制。
+**策略与持久化。** ExecutionPolicySnapshot v1保存Loop、Preparation、Context实际标量，以及模型、资源和解释规则版本；schema/semantics/各规则版本、范围和SHA256均校验。受理时持久initial策略，组装时一次save绑定最终策略、task、deadline和hash；continuation引用同一hash，继续恢复原charged/unknown余额。LoopControl、RuntimeHarness、循环、PreparationService及DeepSeek实际请求context检查消费冻结参数；后台job继续持有自己的预算，实时来源撤销和权限不冻结。`agent.policy-snapshot.enabled` 默认 true，显式环境别名 AGENT_POLICY_SNAPSHOT_ENABLED，只影响新 Run 创建；旧无snapshot记录始终LEGACY_CURRENT_POLICY，关闭写者仍读v1。回滚使用支持 v1 的兼容 reader。
 
 **未知提交。** bindPreparedTask明确失败回滚内存；SQL可能已提交但ACK丢失时，失败/取消终态采用持锁权威行的task/policy，防止snapshot与deadline/prepared_task投影分裂。首次materialize独立校验row deadline，RunState回投权威effectiveDeadline。成功终态策略不一致则拒绝；不得为继续执行静默采用当前策略。门控测试新增commit-then-throw故障场景。
 
@@ -971,16 +971,15 @@ management:
           include: readinessState,agentStorage
 agent:
   memory:
-    # Personal memory is gated until lifecycle and real-model quality acceptance pass.
+    # Base default; the persistent profile enables personal memory.
     enabled: ${AGENT_MEMORY_ENABLED:false}
-    consolidation:
-      enabled: ${AGENT_MEMORY_CONSOLIDATION_ENABLED:false}
   tools:
     parallel:
       enabled: ${AGENT_TOOLS_PARALLEL_ENABLED:false}
       per-run: ${AGENT_TOOLS_PARALLEL_PER_RUN:2}
   compaction:
-    enabled: ${AGENT_COMPACTION_ENABLED:false}
+    # Session compaction runs only with MySQL storage.
+    enabled: ${AGENT_COMPACTION_ENABLED:true}
     trigger-bytes: ${AGENT_COMPACTION_TRIGGER_BYTES:5632}
   video:
     cache:
