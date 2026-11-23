@@ -13,7 +13,7 @@ public final class VideoContentTask {
     private static final Pattern SECONDS = Pattern.compile("(?<![\\d.])第?([+-]?\\d+(?:\\.\\d+)?)\\s*秒?" + JOIN + "第?([+-]?\\d+(?:\\.\\d+)?)\\s*秒");
     private static final Pattern CLOCK = Pattern.compile("(?<![\\d:])(\\d{1,3}:[0-5]\\d(?:\\.\\d{1,3})?)" + JOIN + "(\\d{1,3}:[0-5]\\d(?:\\.\\d{1,3})?)(?![\\d:])");
     public static boolean currentSegmentRequested(String text) {
-        return text.matches("(?s).*(?:当前播放|当前片段|这段画面|解释(?:一下)?这里).*");
+        return ConversationTopics.currentPlayback(text);
     }
     public static boolean requested(String text) {
         if (CreatorInteractionTask.requested(text)) return false;

@@ -491,13 +491,13 @@ class DeepSeekAdapterTest {
         assertEquals("MODEL_QUOTA_EXHAUSTED",assertThrows(AgentException.class,()->client.complete(properties.harnessModel(),List.of(Map.of("role","user","content","JSON")),128,control().withBudget(budget))).code());
         assertEquals(1,requests.size());assertEquals(charged,budget.attributes().get("budget.charged_tokens"));
     }
-    @Test void bothPreparationAndHarnessSendCompactedHistoryWithoutMutatingSource() throws Exception {
+    @Test void intentAndHarnessHonorHistoryBudgetWithoutMutatingSource() throws Exception {
         var bounded = new DeepSeekClient(properties, mapper, new com.tianmu.agent.model.ContextPolicy(98304, 256));
         var memory = new com.tianmu.agent.core.MemoryTypes.View(1, "old".repeat(2000), List.of(), false);
         var adapters = new DeepSeekAdapters();
         answer = request -> request.path("model").asText().equals(properties.preparationModel())
-                ? "{\"emotion\":\"NEUTRAL\"}" : "{\"kind\":\"CLARIFY\",\"clarification\":\"Which date?\"}";
-        adapters.deepSeekPreparation(bounded, properties, mapper, new PromptCatalog()).emotion(
+                ? "{\"intent\":\"OTHER\"}" : "{\"kind\":\"CLARIFY\",\"clarification\":\"Which date?\"}";
+        adapters.deepSeekPreparation(bounded, properties, mapper, new PromptCatalog()).intent(
                 new Input(input().query(), input().businessDate(), input().scope(), memory), control());
         adapters.deepSeekHarnessModel(bounded, properties, mapper, new PromptCatalog()).decide(
                 new ModelContext(input().query(), input().businessDate(), input().scope(), Set.of(), List.of(), List.of(), 6,
@@ -656,7 +656,10 @@ class DeepSeekAdapterTest {
                 "查视频 1001 的弹幕", original.requestedAt().minusSeconds(60));
         var item = new MemoryTypes.Persistent(UUID.randomUUID(), 1, "user", "test", "preference",
                 "用中文回答", List.of(), original.requestedAt().plusSeconds(60));
-        var memory = new MemoryTypes.View(1, "", List.of(message), false, null, null, List.of(item));
+        var summary = new MemoryTypes.Compaction(UUID.randomUUID(), 1, 1, 4, 4, Map.of(
+                "synopsis", "已确认统计视频 1001。", "claims", List.of(
+                        Map.of("type", "constraint", "text", "只查弹幕数", "source_refs", List.of(message.id().toString())))));
+        var memory = new MemoryTypes.View(1, "", List.of(message), false, null, null, List.of(item), List.of(summary));
         var input = new Input(original.query(), original.businessDate(), original.scope(), memory,
                 original.requestedAt(), original.intentCandidates());
         var conditions = Map.<String, Object>of("video_id", 1001, "date", "2026-10-20", "metric", "bullet_count");
@@ -673,12 +676,17 @@ class DeepSeekAdapterTest {
         for (int i = 0; i < requests.size(); i++) {
             var payload = mapper.readTree(requests.get(i).path("messages").get(1).path("content").asText());
             assertFalse(payload.has("requestedAt"));
-            var recent = payload.path("memory").path("recent").get(0);
-            assertEquals(message.text(), recent.path("text").asText());
-            assertFalse(recent.has("at"));
-            var persistent = payload.path("memory").path("persistent").get(0);
-            assertEquals(item.text(), persistent.path("text").asText());
-            assertFalse(persistent.has("expiresAt"));
+            var projected = payload.path("memory");
+            assertEquals(mapper.valueToTree(Map.of("role", "user", "text", message.text())), projected.path("recent").get(0));
+            assertFalse(projected.has("version"));
+            assertFalse(projected.has("persistent"));
+            if (i == 1) {
+                assertFalse(projected.has("compaction"));
+            } else {
+                var compacted = projected.path("compaction").get(0);
+                assertEquals("已确认统计视频 1001。", compacted.path("synopsis").asText());
+                assertFalse(compacted.path("claims").get(0).has("source_refs"));
+            }
             if (i < 2) {
                 assertFalse(payload.has("businessDate"));
             } else {
@@ -686,6 +694,15 @@ class DeepSeekAdapterTest {
                 assertEquals(mapper.valueToTree(conditions), payload.path("serverTaskCandidate").path("conditions"));
             }
         }
+        var v4 = new ExecutionPolicySnapshot.Context(98304,16384,4,8192,"1.0",
+                ExecutionPolicySnapshot.Context.STABLE_TOOL_ORDER_PROJECTION,"slots-v1");
+        answer = request -> "{\"emotion\":\"NEUTRAL\"}";
+        model.emotion(input, control().withContextPolicy(v4));
+        var old = mapper.readTree(requests.get(3).path("messages").get(1).path("content").asText()).path("memory");
+        assertEquals(1, old.path("version").asInt());
+        assertEquals(message.runId().toString(), old.path("recent").get(0).path("runId").asText());
+        assertEquals(item.text(), old.path("persistent").get(0).path("text").asText());
+        assertNotEquals(model.revision(), model.revision(v4.projectionVersion()));
     }
 
     @Test void intentUsesIndependentStructuredModelRequestAndRejectsUnknownFields() {

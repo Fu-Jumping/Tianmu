@@ -60,7 +60,8 @@ class HarnessContextBuilderTest {
                 com.tianmu.agent.core.PreparationTypes.Intent.KNOWLEDGE);
         var context = new ModelContext(preparation.query(), LocalDate.now(), new AccessScope("t","u",Set.of()),
                 Set.of(),List.of(),List.of(),6,false,"",preparation);
-        var messages = new HarnessContextBuilder(json,ContextPolicy.defaults()).build("rules", context);
+        var builder = new HarnessContextBuilder(json, ContextPolicy.defaults());
+        var messages = builder.build("rules", context);
         String host = messages.stream().filter(m -> "system".equals(m.get("role"))).map(m -> m.get("content").toString()).reduce("",String::concat);
         String reference=messages.stream().filter(m->"user".equals(m.get("role")) && m.get("content").toString().contains("<focus>")).findFirst().orElseThrow().get("content").toString();
         assertTrue(reference.contains("NEGATIVE")); assertTrue(reference.contains("KNOWLEDGE"));
@@ -68,6 +69,10 @@ class HarnessContextBuilderTest {
         assertFalse(host.contains("用例子解释构图"));
         assertTrue(host.startsWith("rules"));
         assertFalse(host.contains("CURRENT_FOCUS_BOUNDARY"));
+        assertEquals(reference, messages.get(1).get("content"));
+        assertEquals("还是不明白构图", messages.get(2).get("content"));
+        assertEquals(builder.build("rules", context, "", ExecutionPolicySnapshot.Context.STABLE_TOOL_ORDER_PROJECTION),
+                messages);
     }
     final ObjectMapper json=new ObjectMapper().findAndRegisterModules();
     MemoryTypes.Message m(UUID turn,long sequence,String role,String text) {return new MemoryTypes.Message(UUID.randomUUID(),turn,sequence,role,text,Instant.now());}

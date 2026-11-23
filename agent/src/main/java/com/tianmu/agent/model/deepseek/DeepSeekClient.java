@@ -56,6 +56,9 @@ public final class DeepSeekClient {
     }
     String harnessProjection(CallControl control) {
         if(control.frozenContext()!=null)return control.frozenContext().projectionVersion();
+        return defaultHarnessProjection();
+    }
+    String defaultHarnessProjection() {
         return tailProjectionEnabled ? com.tianmu.agent.core.ExecutionPolicySnapshot.Context.CURRENT_PROJECTION
                 : com.tianmu.agent.core.ExecutionPolicySnapshot.Context.LEGACY_PROJECTION;
     }

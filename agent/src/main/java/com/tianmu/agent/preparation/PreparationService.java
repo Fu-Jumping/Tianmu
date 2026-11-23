@@ -59,7 +59,9 @@ public class PreparationService implements AutoCloseable {
     }
     public Result prepare(RunState run, String query) {
         var runPolicy=RunPolicies.preparation(run,policy);
-        if(run.executionPolicy()!=null && !run.executionPolicy().model().preparationRevision().equals(model.revision()))throw new AgentException("MODEL_REVISION_UNAVAILABLE","Pinned preparation model is unavailable");
+        var executionPolicy = run.executionPolicy();
+        if(executionPolicy != null && !executionPolicy.model().preparationRevision().equals(model.revision(executionPolicy.context().projectionVersion())))
+            throw new AgentException("MODEL_REVISION_UNAVAILABLE","Pinned preparation model is unavailable");
         contexts.load(run);
         var memoryReply=contexts.memoryRequest(run);
         if(memoryReply.isPresent())return new Result(Route.DIRECT,new PreparedRequest(run.message,query,Emotion.UNKNOWN,Set.of(),Set.of("intent","understanding","emotion")),null,null,memoryReply.get());

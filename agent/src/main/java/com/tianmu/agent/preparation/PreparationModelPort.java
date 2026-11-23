@@ -7,6 +7,7 @@ import com.tianmu.agent.runtime.control.CallControl;
 /** Independent intent and clarification/condition candidates, plus optional emotion. */
 public interface PreparationModelPort {
     default String revision(){return "preparation-v1";}
+    default String revision(String projection){return revision();}
     Intent intent(Input input, CallControl control);
     default IntentRecognition recognizeIntent(Input input, CallControl control) {
         return new IntentRecognition(intent(input,control),null,java.util.List.of(),input.intentCandidates());

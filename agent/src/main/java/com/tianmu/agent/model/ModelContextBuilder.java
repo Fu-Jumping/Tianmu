@@ -50,7 +50,9 @@ public final class ModelContextBuilder {
         // Remove a whole oldest turn so a retained answer cannot lose its paired user message.
         JsonNode runId = recent.get(0).get("runId");
         do { recent.remove(0); }
-        while (!recent.isEmpty() && runId != null && !runId.isNull() && runId.equals(recent.get(0).get("runId")));
+        while (!recent.isEmpty() && (runId == null || runId.isNull()
+                ? !"user".equals(recent.get(0).path("role").asText())
+                : runId.equals(recent.get(0).get("runId"))));
         object.put("truncated", true);
         return true;
     }

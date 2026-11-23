@@ -16,9 +16,16 @@ public record ExecutionPolicySnapshot(String schemaVersion,String semanticsVersi
         public static final String LEGACY_PROJECTION = "chat_native_v1";
         public static final String PREVIOUS_PROJECTION = "chat_native_v2";
         public static final String DATE_TAIL_PROJECTION = "chat_native_v3";
-        public static final String CURRENT_PROJECTION = "chat_native_v4";
+        public static final String STABLE_TOOL_ORDER_PROJECTION = "chat_native_v4";
+        public static final String CURRENT_PROJECTION = "chat_native_v7";
         public static boolean usesDateTail(String projection) {
-            return DATE_TAIL_PROJECTION.equals(projection) || CURRENT_PROJECTION.equals(projection);
+            return DATE_TAIL_PROJECTION.equals(projection) || usesStableToolOrder(projection);
+        }
+        public static boolean usesStableToolOrder(String projection) {
+            return STABLE_TOOL_ORDER_PROJECTION.equals(projection) || CURRENT_PROJECTION.equals(projection);
+        }
+        public static boolean usesCompactPreparation(String projection) {
+            return CURRENT_PROJECTION.equals(projection);
         }
     }
     public record Business(long reportWindowMillis,String conditionsVersion,String completionVersion,Map<String,String> resources) {

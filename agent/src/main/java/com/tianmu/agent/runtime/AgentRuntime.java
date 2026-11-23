@@ -143,7 +143,7 @@ public class AgentRuntime {
                             taskPolicy.project(policyInput(run))));
                     var capabilities = tools.capabilities(run, finalizing ? available : context.availableTools());
                     var policy = run.executionPolicy();
-                    if (!finalizing && (policy == null || ExecutionPolicySnapshot.Context.CURRENT_PROJECTION.equals(policy.context().projectionVersion())))
+                    if (!finalizing && (policy == null || ExecutionPolicySnapshot.Context.usesStableToolOrder(policy.context().projectionVersion())))
                         capabilities = run.execution().orderTools(context.availableTools(), capabilities);
                     return context.withCapabilities(capabilities);
                 });

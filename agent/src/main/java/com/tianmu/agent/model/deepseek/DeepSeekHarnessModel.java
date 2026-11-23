@@ -83,7 +83,7 @@ public final class DeepSeekHarnessModel implements ModelPort {
         var available = context.availableTools();
         if (Context.LEGACY_PROJECTION.equals(projection)) return available;
         var order = context.capabilities().toolOrder();
-        if (Context.CURRENT_PROJECTION.equals(projection) && order != null) {
+        if (Context.usesStableToolOrder(projection) && order != null) {
             var byName = new LinkedHashMap<String, ToolDefinition>();
             available.forEach(tool -> byName.put(tool.name(), tool));
             var ordered = new ArrayList<ToolDefinition>();
