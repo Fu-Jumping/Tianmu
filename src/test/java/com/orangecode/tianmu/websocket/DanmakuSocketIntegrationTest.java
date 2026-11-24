@@ -20,6 +20,7 @@ class DanmakuSocketIntegrationTest {
     /** Real HTTP upgrade and WebSocket frames through the production Netty pipeline. */
     @Test void anonymousReceiveAuthenticatedSendAndRevocationWorkOverActualSocket() throws Exception {
         var producer = mock(RocketMQProducer.class);
+        when(producer.sendMessageAsync(anyString(), anyString())).thenReturn(CompletableFuture.completedFuture(null));
         var authentication = mock(SessionAuthentication.class);
         when(authentication.authenticate(isNull())).thenReturn(null);
         when(authentication.authenticate("valid-session")).thenReturn(1L);
@@ -30,11 +31,14 @@ class DanmakuSocketIntegrationTest {
                 new io.netty.util.concurrent.DefaultThreadFactory("test-danmaku-business"),
                 32, io.netty.util.concurrent.RejectedExecutionHandlers.reject());
         Channel server = null; WebSocket socket = null;
+        var limits = new DanmakuSendQueue.Limits(512, 128, 1);
+        var preparation = Executors.newSingleThreadExecutor();
         try {
             server = new ServerBootstrap().group(boss, workers).channel(NioServerSocketChannel.class)
                     .childHandler(new ChannelInitializer<SocketChannel>() {
                         @Override protected void initChannel(SocketChannel channel) {
-                            NettyService.configurePipeline(channel.pipeline(),producer,authentication,videos,broadcasts,messages);
+                            NettyService.configurePipeline(channel.pipeline(), producer, authentication, videos,
+                                    broadcasts, messages, limits, preparation);
                         }
                     }).bind("127.0.0.1",0).sync().channel();
             var listener = new Messages();
@@ -44,16 +48,32 @@ class DanmakuSocketIntegrationTest {
             assertEquals(1,listener.next().path("type").asInt());
             socket.sendText("{\"userId\":\"1\",\"content\":\"guest\",\"playbackTime\":0}",true).get(5,TimeUnit.SECONDS);
             assertEquals(3,listener.next().path("type").asInt()); verifyNoInteractions(producer);
+            var before = com.orangecode.tianmu.common.DanmakuMetrics.snapshot();
             socket.sendText("{\"authorization\":\"valid-session\",\"content\":\"hello\",\"playbackTime\":0}",true).get(5,TimeUnit.SECONDS);
             var delivered=listener.next();assertEquals(5,delivered.path("type").asInt());
             assertEquals("1",delivered.path("data").get(0).path("userId").asText());
+            assertTimeoutPreemptively(java.time.Duration.ofSeconds(3), () -> {
+                while (com.orangecode.tianmu.common.DanmakuMetrics.snapshot().get("WS_TO_WRITE_COMPLETE_count")
+                        <= before.get("WS_TO_WRITE_COMPLETE_count")) {
+                    Thread.sleep(10);
+                    if (Thread.currentThread().isInterrupted()) throw new InterruptedException();
+                }
+            });
+            var after = com.orangecode.tianmu.common.DanmakuMetrics.snapshot();
+            for (String stage : java.util.List.of("WS_QUEUE", "JSON_PARSE", "AUTH", "VIDEO_CHECK", "MQ_SEND",
+                    "MQ_SUBMIT", "MQ_CALLBACK_QUEUE", "MQ_REORDER_WAIT", "WS_SEND_ORDER_WAIT", "MQ_TO_BATCH", "BATCH_WAIT",
+                    "FLUSH_PREPARE", "FLUSH_DISPATCH", "BROADCAST_WRITE",
+                    "WS_TO_WRITE_COMPLETE")) {
+                assertTrue(after.get(stage + "_count") > before.get(stage + "_count"), stage + " was not measured");
+            }
             when(authentication.authenticate("valid-session")).thenReturn(null);
             socket.sendText("{\"authorization\":\"valid-session\",\"content\":\"after logout\",\"playbackTime\":0}",true).get(5,TimeUnit.SECONDS);
             assertEquals(3,listener.next().path("type").asInt());
-            verify(producer,times(1)).sendMessage(eq("tianmu-topic"),anyString());
+            verify(producer,times(1)).sendMessageAsync(eq("tianmu-topic"),anyString());
             socket.sendClose(WebSocket.NORMAL_CLOSURE,"done").get(5,TimeUnit.SECONDS);
         } finally {
             if(socket!=null)socket.abort();
+            preparation.shutdownNow();
             broadcasts.close();
             if(server!=null)server.close().syncUninterruptibly();
             messages.shutdownGracefully(1,5,TimeUnit.SECONDS).syncUninterruptibly();

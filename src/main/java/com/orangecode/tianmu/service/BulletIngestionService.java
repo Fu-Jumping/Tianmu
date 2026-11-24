@@ -1,9 +1,11 @@
 package com.orangecode.tianmu.service;
 
 import com.orangecode.tianmu.application.DeletedBullets;
+import com.orangecode.tianmu.common.DanmakuMetrics;
 import com.orangecode.tianmu.model.dto.bullet.SendBulletRequest;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Isolation;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
@@ -23,14 +25,14 @@ public class BulletIngestionService {
             @Value("${agent.bridge.datetime-storage-zone:Asia/Shanghai}") String zone) {
         this.db=db; this.datetimeZone=ZoneId.of(zone);
     }
-    @Transactional(rollbackFor=Exception.class)
+    @Transactional(isolation = Isolation.READ_COMMITTED, rollbackFor = Exception.class)
     public void persist(SendBulletRequest event) { persistBatch(Collections.singletonList(event)); }
 
-    @Transactional(rollbackFor=Exception.class)
+    @Transactional(isolation = Isolation.READ_COMMITTED, rollbackFor = Exception.class)
     public void persistBatch(List<SendBulletRequest> events) {
         long start=System.nanoTime();
         try { writeBatch(events); }
-        finally { com.orangecode.tianmu.common.DanmakuMetrics.observe(com.orangecode.tianmu.common.DanmakuMetrics.Stage.DB_BATCH_BODY,System.nanoTime()-start); }
+        finally { DanmakuMetrics.observe(DanmakuMetrics.Stage.DB_BATCH_BODY,System.nanoTime()-start); }
     }
     private void writeBatch(List<SendBulletRequest> events) {
         if(events==null || events.isEmpty() || events.size()>MAX_BATCH_SIZE)
@@ -45,7 +47,12 @@ public class BulletIngestionService {
         var videos=new TreeSet<Long>(); unique.values().forEach(e->videos.add(e.getVideoId()));
         var existingVideos=new HashSet<Long>();
         for(long video:videos) {
-            if(!db.queryForList("SELECT video_id FROM video WHERE video_id=? AND is_delete=0 FOR UPDATE",video).isEmpty()) existingVideos.add(video);
+            long started = System.nanoTime();
+            try {
+                if (!db.queryForList("SELECT video_id FROM video WHERE video_id=? AND is_delete=0 FOR UPDATE", video).isEmpty()) existingVideos.add(video);
+            } finally {
+                DanmakuMetrics.observe(DanmakuMetrics.Stage.DB_VIDEO_LOCK, System.nanoTime() - started);
+            }
         }
         var ids=new ArrayList<>(unique.keySet());
         String in=String.join(",",Collections.nCopies(ids.size(),"?"));
@@ -88,11 +95,21 @@ public class BulletIngestionService {
                 :LocalDateTime.ofInstant(created.toInstant(),datetimeZone).format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss.SSS"));
             args.add(new Object[]{event.getBulletId(),event.getVideoId(),event.getUserId(),event.getContent(),event.getColor(),event.getPlaybackTime(),timestamp});
         }
-        db.batchUpdate(sql,args);
-        for(var count:counts.entrySet()) {
-            db.update("INSERT INTO video_stats(video_id,view_count,bullet_count,like_count,coin_count,favorite_count,comment_count,create_time,update_time,is_delete) VALUES(?,0,0,0,0,0,0,UTC_TIMESTAMP(),UTC_TIMESTAMP(),0) ON DUPLICATE KEY UPDATE video_id=video_id",count.getKey());
-            if(db.update("UPDATE video_stats SET bullet_count=COALESCE(bullet_count,0)+?,bullet_revision=bullet_revision+1,update_time=UTC_TIMESTAMP() WHERE video_id=?",count.getValue(),count.getKey())!=1)
-                throw new IllegalStateException("Bullet counter update failed");
+        long insertStarted = System.nanoTime();
+        try {
+            db.batchUpdate(sql, args);
+        } finally {
+            DanmakuMetrics.observe(DanmakuMetrics.Stage.DB_INSERT, System.nanoTime() - insertStarted);
+        }
+        long statsStarted = System.nanoTime();
+        try {
+            for(var count:counts.entrySet()) {
+                db.update("INSERT INTO video_stats(video_id,view_count,bullet_count,like_count,coin_count,favorite_count,comment_count,create_time,update_time,is_delete) VALUES(?,0,0,0,0,0,0,UTC_TIMESTAMP(),UTC_TIMESTAMP(),0) ON DUPLICATE KEY UPDATE video_id=video_id",count.getKey());
+                if(db.update("UPDATE video_stats SET bullet_count=COALESCE(bullet_count,0)+?,bullet_revision=bullet_revision+1,update_time=UTC_TIMESTAMP() WHERE video_id=?",count.getValue(),count.getKey())!=1)
+                    throw new IllegalStateException("Bullet counter update failed");
+            }
+        } finally {
+            DanmakuMetrics.observe(DanmakuMetrics.Stage.DB_STATS, System.nanoTime() - statsStarted);
         }
     }
     private String timestampType() {

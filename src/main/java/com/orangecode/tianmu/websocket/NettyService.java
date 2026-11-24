@@ -2,6 +2,10 @@ package com.orangecode.tianmu.websocket;
 
 import com.orangecode.tianmu.common.DanmakuMetrics;
 
+import java.util.LinkedHashMap;
+import java.util.concurrent.ArrayBlockingQueue;
+import java.util.concurrent.Executor;
+import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 
 import com.orangecode.tianmu.producer.RocketMQProducer;
@@ -22,7 +26,6 @@ import io.netty.util.NettyRuntime;
 import io.netty.util.concurrent.*;
 import jakarta.annotation.PostConstruct;
 import jakarta.annotation.PreDestroy;
-import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Configuration;
@@ -31,10 +34,9 @@ import com.orangecode.tianmu.application.VideoLookup;
 
 @Slf4j
 @Configuration
-@RequiredArgsConstructor
 public class NettyService {
-
-
+    private static final int MAX_OUTSTANDING = 1024;
+    private static final int MAX_PER_ROOM = 512;
 
     @Value("${netty.port}")
     private int port;
@@ -42,18 +44,21 @@ public class NettyService {
     private final EventLoopGroup bossGroup = new NioEventLoopGroup(1);
 
     private final EventLoopGroup workerGroup = new NioEventLoopGroup(NettyRuntime.availableProcessors() * 2);
-    // Redis, video lookups and MQ sends must not block socket IO threads.
-    private final EventExecutorGroup messageGroup = new DefaultEventExecutorGroup(4,
-            new DefaultThreadFactory("danmaku-business"), 1024, (task, executor) -> {
-                DanmakuMetrics.rejected.increment();
-                throw new java.util.concurrent.RejectedExecutionException("Danmaku business queue full or stopped");
-            });
+    private final DefaultEventExecutorGroup messageGroup;
+    private final ThreadPoolExecutor preparationPool;
+
+    @Value("${netty.danmaku-async-window:2}")
+    private int asyncWindow;
+    private static final TimedDanmakuFrame.Stamp HANDOFF_TIMER = new TimedDanmakuFrame.Stamp();
 
     @org.springframework.scheduling.annotation.Scheduled(fixedDelay=1000)
     public void sampleQueue() {
-        long pending=0;
-        for (var executor : messageGroup) if (executor instanceof SingleThreadEventExecutor single) pending+=single.pendingTasks();
-        DanmakuMetrics.pendingTasks.set(pending);
+        var pending = new LinkedHashMap<String, Integer>();
+        for (var executor : messageGroup) {
+            pending.put(DanmakuMetrics.workerId(executor), ((SingleThreadEventExecutor) executor).pendingTasks());
+        }
+        pending.put("shared-preparation", preparationPool.getQueue().size());
+        DanmakuMetrics.sampleWorkers(pending);
     }
 
     private final RocketMQProducer rocketMQProducer;
@@ -63,11 +68,28 @@ public class NettyService {
     private final RoomBatchBroadcaster roomBroadcasts;
 
     private Channel serverChannel;
+    private DanmakuSendQueue.Limits sendLimits;
 
+    public NettyService(RocketMQProducer rocketMQProducer, SessionAuthentication sessionAuthentication,
+                        VideoLookup videoLookup, RoomBatchBroadcaster roomBroadcasts,
+                        @Value("${netty.danmaku-business-threads:16}") int businessThreads) {
+        this.rocketMQProducer = rocketMQProducer;
+        this.sessionAuthentication = sessionAuthentication;
+        this.videoLookup = videoLookup;
+        this.roomBroadcasts = roomBroadcasts;
+        // Redis, video lookups and MQ sends must not block socket IO threads.
+        this.messageGroup = new DefaultEventExecutorGroup(businessThreads,
+                new DefaultThreadFactory("danmaku-business"), 1024, (task, executor) -> {
+                    DanmakuMetrics.rejected.increment();
+                    throw new java.util.concurrent.RejectedExecutionException("Danmaku business queue full or stopped");
+                });
+        this.preparationPool = new ThreadPoolExecutor(businessThreads, businessThreads, 0, TimeUnit.SECONDS,
+                new ArrayBlockingQueue<>(MAX_OUTSTANDING), new DefaultThreadFactory("danmaku-prepare"));
+    }
 
     @PostConstruct
     public void start() {
-
+        sendLimits = new DanmakuSendQueue.Limits(MAX_OUTSTANDING, MAX_PER_ROOM, asyncWindow);
         new Thread(() -> {
             try {
                 run();
@@ -94,7 +116,8 @@ public class NettyService {
                     @Override
                     protected void initChannel(SocketChannel socketChannel) {
                         ChannelPipeline pipeline = socketChannel.pipeline();
-                        configurePipeline(pipeline, rocketMQProducer, sessionAuthentication, videoLookup, roomBroadcasts, messageGroup);
+                        configurePipeline(pipeline, rocketMQProducer, sessionAuthentication, videoLookup, roomBroadcasts,
+                                messageGroup, sendLimits, preparationPool);
                     }
                 });
         serverChannel = serverBootstrap.bind(port).addListener(future -> {
@@ -109,13 +132,15 @@ public class NettyService {
 
     static void configurePipeline(ChannelPipeline pipeline, RocketMQProducer producer,
                                   SessionAuthentication authentication, VideoLookup videos, RoomBatchBroadcaster broadcasts,
-                                  EventExecutorGroup executor) {
+                                  EventExecutorGroup executor, DanmakuSendQueue.Limits limits, Executor preparation) {
         pipeline.addLast(new IdleStateHandler(60, 0, 0, TimeUnit.SECONDS));
         pipeline.addLast(new HttpServerCodec());
         pipeline.addLast(new HttpObjectAggregator(65536));
         pipeline.addLast(new WebSocketServerProtocolHandler("/ws/bulletScreen", null, true, 65536, false, true));
         pipeline.addLast(new ChannelTrafficShapingHandler(1024 * 1024, 1024 * 1024));
-        pipeline.addLast(executor, new WebSocketHandler(producer, authentication, videos, broadcasts));
+        pipeline.addLast(HANDOFF_TIMER);
+        pipeline.addLast(executor, new WebSocketHandler(producer, authentication, videos, broadcasts,
+                limits, preparation));
     }
 
     @PreDestroy
@@ -125,6 +150,14 @@ public class NettyService {
             serverChannel.close().syncUninterruptibly();
         }
 
+        // Leave the coordinators available while running preparations hand off their results.
+        preparationPool.shutdown();
+        try {
+            if (!preparationPool.awaitTermination(5, TimeUnit.SECONDS)) preparationPool.shutdownNow();
+        } catch (InterruptedException interrupted) {
+            preparationPool.shutdownNow();
+            Thread.currentThread().interrupt();
+        }
         roomBroadcasts.close();
         // Pipeline removal may hop from business executors back to socket IO executors.
         messageGroup.shutdownGracefully().syncUninterruptibly();

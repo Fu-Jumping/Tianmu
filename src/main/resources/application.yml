@@ -42,6 +42,8 @@ minio:
   bucket-name: ${TIANMU_MINIO_BUCKET:tianmu-upload}
 netty:
   port: ${TIANMU_NETTY_PORT:9101}
+  danmaku-business-threads: ${TIANMU_DANMAKU_BUSINESS_THREADS:16}
+  danmaku-async-window: ${TIANMU_DANMAKU_ASYNC_WINDOW:2}
   danmaku-batch:
     window-ms: ${TIANMU_DANMAKU_BATCH_WINDOW_MS:100}
     max-items: ${TIANMU_DANMAKU_BATCH_MAX_ITEMS:50}

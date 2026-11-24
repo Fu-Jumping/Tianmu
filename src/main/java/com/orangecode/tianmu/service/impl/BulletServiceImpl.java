@@ -7,7 +7,6 @@ import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.orangecode.tianmu.common.ErrorCode;
 import com.orangecode.tianmu.mapper.BulletMapper;
 import com.orangecode.tianmu.model.dto.bullet.DeleteBulletRequest;
-import com.orangecode.tianmu.model.dto.bullet.SendBulletRequest;
 import com.orangecode.tianmu.model.entity.Bullet;
 import com.orangecode.tianmu.model.vo.bullet.OnlineBulletResponse;
 import com.orangecode.tianmu.service.BulletService;
@@ -24,17 +23,6 @@ public class BulletServiceImpl extends ServiceImpl<BulletMapper, Bullet> impleme
     @Resource private org.springframework.jdbc.core.JdbcTemplate jdbc;
     @Resource private org.springframework.data.redis.core.StringRedisTemplate redis;
     @Resource private com.fasterxml.jackson.databind.ObjectMapper json;
-    @Resource
-    private com.orangecode.tianmu.service.BulletIngestionService ingestion;
-
-
-@Override
-    @Transactional(rollbackFor = Exception.class)
-    public void saveBulletToMySQL(SendBulletRequest sendBulletRequest) {
-        ingestion.persist(sendBulletRequest);
-    }
-
-
     @Override
     @Transactional(rollbackFor = Exception.class)
     public boolean deleteVideoBullet(DeleteBulletRequest input) {
