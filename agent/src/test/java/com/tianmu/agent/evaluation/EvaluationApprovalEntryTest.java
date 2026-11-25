@@ -1,6 +1,7 @@
 package com.tianmu.agent.evaluation;
 
 import com.tianmu.agent.core.AgentException;
+import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -8,14 +9,28 @@ import org.junit.jupiter.api.io.TempDir;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.HashMap;
+import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.*;
 
 /** The two-process entry refuses missing/draft/old/mismatched approval receipts before ledger copy. */
 class EvaluationApprovalEntryTest {
+    private static final Map<String, String> PREVIOUS_PROPERTIES = new HashMap<>();
+
     @BeforeAll
-    static void pinBaseline() {
-        System.setProperty("eval.approval.baseline", "f7527962e635210f0fb02a759d39c47dbdaa8805");
+    static void pinApprovalIdentity() {
+        Map.of("eval.approval.baseline", "f7527962e635210f0fb02a759d39c47dbdaa8805",
+                "eval.approval.group", "canon-730013-pair").forEach((key, value) ->
+                PREVIOUS_PROPERTIES.put(key, System.setProperty(key, value)));
+    }
+
+    @AfterAll
+    static void restoreApprovalIdentity() {
+        PREVIOUS_PROPERTIES.forEach((key, value) -> {
+            if (value == null) System.clearProperty(key);
+            else System.setProperty(key, value);
+        });
     }
 
     private static Path receipt(Path dir, String state, boolean approved, String baseline,

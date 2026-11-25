@@ -13,6 +13,8 @@ import com.tianmu.agent.model.deepseek.DeepSeekProperties;
 import com.tianmu.agent.runtime.control.CallControl;
 import com.tianmu.agent.runtime.control.CancellationToken;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.condition.OS;
+import org.junit.jupiter.api.io.TempDir;
 import java.net.InetSocketAddress;
 import java.net.URI;
 import java.net.http.HttpClient;
@@ -220,32 +222,37 @@ class EvaluationToolFreezeTest {
         }
     }
 
-    @Test void junctionPlantedOverAKeyNameCannotRedirectWrites() throws Exception {
-        Path root = Files.createTempDirectory("admission-freeze-java-");
-        Path outside = Files.createTempDirectory("admission-freeze-outside-");
+    @Test void directoryLinkAtKeyPathCannotRedirectWrites(@TempDir Path temp) throws Exception {
+        Path root = Files.createDirectory(temp.resolve("store"));
+        Path outside = Files.createDirectory(temp.resolve("outside"));
+        String original = "{\"sentinel\":\"untouched\"}";
         Path sentinel = outside.resolve("sentinel.json");
-        Files.writeString(sentinel, "{\"sentinel\":\"untouched\"}", StandardCharsets.UTF_8);
+        Files.writeString(sentinel, original, StandardCharsets.UTF_8);
         Path link = root.resolve(GOLDEN_KEY + ".json");
-        Process mklink = new ProcessBuilder("cmd", "/c", "mklink", "/J", link.toString(), sentinel.toString())
-                .redirectErrorStream(true).start();
-        mklink.waitFor();
-        boolean junctionCreated = Files.exists(link);
+        var store = new EvaluationToolFreezeStore(root);
         try {
-            var store = new EvaluationToolFreezeStore(root);
-            if (junctionCreated) {
-                assertThrows(RuntimeException.class, () -> store.put(GOLDEN_KEY, "redirect".getBytes(StandardCharsets.UTF_8)),
-                        "a junction resolving outside the root must refuse the write");
-                assertEquals("{\"sentinel\":\"untouched\"}", Files.readString(sentinel, StandardCharsets.UTF_8),
-                        "the sentinel outside the root stays untouched");
+            if (OS.WINDOWS.isCurrentOs()) {
+                Process mklink = new ProcessBuilder("cmd.exe", "/c", "mklink", "/J",
+                        link.toString(), outside.toString()).redirectErrorStream(true).start();
+                byte[] output = mklink.getInputStream().readAllBytes();
+                assertEquals(0, mklink.waitFor(), () -> "Could not create test junction: " + new String(output));
+            } else {
+                Files.createSymbolicLink(link, outside);
             }
-            // With the planted link removed, containment still holds for plain writes:
-            Files.deleteIfExists(link);
-            store.put(GOLDEN_KEY, "plain".getBytes(StandardCharsets.UTF_8));
-            assertArrayEquals("plain".getBytes(StandardCharsets.UTF_8), store.get(GOLDEN_KEY));
+            assertEquals(outside.toRealPath(), link.toRealPath(), "the link must resolve outside the store");
+
+            var refusal = assertThrows(EvaluationToolFreezeStore.FreezeWriteRefused.class,
+                    () -> store.put(GOLDEN_KEY, "redirect".getBytes(StandardCharsets.UTF_8)));
+            assertEquals("frozen artifact path is not contained in the store root", refusal.getMessage());
+            assertEquals(outside.toRealPath(), link.toRealPath(), "the rejected write leaves the link in place");
+            assertEquals(original, Files.readString(sentinel, StandardCharsets.UTF_8));
+            assertFalse(Files.exists(root.resolve(GOLDEN_KEY + ".sha256")), "no sidecar is written");
         } finally {
-            Files.deleteIfExists(link); // deletes the link itself, never the target
-            Files.deleteIfExists(sentinel);
+            Files.deleteIfExists(link);
         }
+        byte[] plain = "plain".getBytes(StandardCharsets.UTF_8);
+        store.put(GOLDEN_KEY, plain);
+        assertArrayEquals(plain, store.get(GOLDEN_KEY));
     }
 
     @Test void sidecarLinkToOutsideWithCorrectDigestIsRefused() throws Exception {

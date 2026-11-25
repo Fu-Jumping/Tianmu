@@ -7,6 +7,7 @@ import com.tianmu.agent.feedback.FeedbackAnalysisService;
 import com.tianmu.agent.runtime.RunService;
 import com.tianmu.agent.runtime.RunState;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
@@ -16,6 +17,7 @@ import org.springframework.test.web.servlet.MockMvc;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.HashMap;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
@@ -39,12 +41,23 @@ class EvaluationVideoCanonFailureCleanupTest {
     private static final String GROUP = "synthetic-pair";
     private static final String SOURCE_SHA = "a".repeat(64);
 
+    private static final Map<String, String> PREVIOUS_PROPERTIES = new HashMap<>();
+
     @BeforeAll
     static void pinProofIdentity() {
-        System.setProperty("eval.approval.group", GROUP);
-        System.setProperty("eval.approval.baseline", BASELINE);
-        System.setProperty("eval.historical.ledger.sha256", SOURCE_SHA);
-        System.setProperty("eval.material.config", CONFIG.toString());
+        Map.of("eval.approval.group", GROUP,
+                "eval.approval.baseline", BASELINE,
+                "eval.historical.ledger.sha256", SOURCE_SHA,
+                "eval.material.config", CONFIG.toString()).forEach((key, value) ->
+                PREVIOUS_PROPERTIES.put(key, System.setProperty(key, value)));
+    }
+
+    @AfterAll
+    static void restoreProofIdentity() {
+        PREVIOUS_PROPERTIES.forEach((key, value) -> {
+            if (value == null) System.clearProperty(key);
+            else System.setProperty(key, value);
+        });
     }
 
     @AfterEach
